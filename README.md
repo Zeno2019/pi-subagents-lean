@@ -44,6 +44,8 @@ After choosing to replace the original package, use:
 pi install git:github.com/Zeno2019/pi-subagents-lean
 ```
 
+The default branch targets Pi 0.87.1. The repository's npm settings keep host-provided Pi peers out of the package installation and disable dependency lifecycle scripts.
+
 Load only one of this fork and the original package in a session: they register the same tool names. Installation alone does not enable the RPC switch. Pi 1.x compatibility is not claimed.
 
 Development checks use Node 24 and the lockfile's Pi 0.87.1 SDK:
