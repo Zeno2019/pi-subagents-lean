@@ -28,7 +28,28 @@ Do not merge management tool names without reviewing spawning grants, denied too
 - Knip findings match upstream: one unused file, one unused development dependency, 17 unused exports and seven unused exported types. No new finding was introduced.
 - Character measurement using six local presets: tool metadata 8,779 → 2,929; roster 6,332 → 5,685; combined 15,111 → 8,614. This does not measure actual billed tokens or the whole session.
 
-Paseo 0.12.0 source inspection confirms that its Pi launcher defaults to `--mode rpc`, so the opt-in argv check matches that host. It also shows a persistent session event subscription independent of a foreground turn. This supports the design but does not prove the complete Pi adapter → manager → UI path. Keep the opt-in off until that host-specific acceptance is complete. Daemon restart recovery is also outside these checks.
+Paseo 0.12.0 source inspection confirms that its Pi launcher defaults to `--mode rpc`, so the opt-in argv check matches that host. Its persistent session subscription also survives the end of a foreground turn.
+
+A real Paseo CLI/MCP acceptance subsequently passed with Pi 0.87.1 and GPT-6.1 Sol high for both parent and child. The launch returned `started`; the parent yielded before completion; one result arrived and triggered another parent response 28.682 seconds after the first response. The parent transcript contained only one user message. Paseo's activity stream included both responses and the result, and its final status was idle with no pending permissions. The test agent was archived. Computer Use was not used.
+
+The real-model test loaded only this fork. A separate local combination check loads all 29 currently enabled extension entrypoints, including the global permission gate, retained UI extensions and BCP with delegation disabled. Its six Markdown preset checks preserve model choices, thinking and background/lineage-only policy. External MCP schemas come from the existing cache, network fetches are blocked, and responses are synthetic. This verifies local loading and tool policy, not external services or model behavior with that entire combination.
+
+A combined lifecycle check also passed with those entrypoints: the real `subagent` handler started a local synthetic child process, returned `started`, let the parent finish, and delivered exactly one result that triggered a new parent response. The test UI answered `Allow Once` to the existing permission request. The fake model and child avoid external inference; this check complements the separate real Paseo test rather than replacing it.
+
+BCP's actual compression kernel separately passed compression, persistent-session reopen, search for a detail absent from the summary, and byte-exact recall with delegation disabled. Only `compress` and `acp_context` remain registered.
+
+No screenshot/rendering, daemon restart recovery, cross-model quality or live-model acceptance of the full extension combination is claimed. The RPC environment switch remains explicit and off by default.
+
+## Local configuration migration
+
+Before replacing an existing installation:
+
+1. Load only this fork, removing the original package entry from the effective configuration.
+2. Set `PI_SUBAGENT_RPC_ASYNC=1` in the actual durable RPC host environment.
+3. If retiring BCP delegation, set its `delegate` option to `false`; retain the context extension.
+4. Check Markdown tool allowlists against the installed tools. For the BCP lean surface, replace `decompress`, `search_context`, `acp_status` and `acp_cache` with `acp_context`, retaining `compress`.
+5. If Hashline replaced the built-in editor, editing roles need `replace`, `insert` and `undo_last_change` instead of `edit`; search roles need `anchor_grep` instead of `grep`. Keep those editing tools out of read-only roles.
+6. Preserve the user's permission policy. The local policy used in acceptance asks for approval before `subagent`; background execution does not grant permission to bypass that approval.
 
 ## Updating upstream
 

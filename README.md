@@ -16,7 +16,9 @@ An asynchronous Markdown preset then returns a started result immediately. Compl
 
 The switch is **off by default**. Print (`-p` / `--print`), JSON and ordinary TUI launches retain upstream behavior. Set the environment variable on the actual Pi RPC host; setting it on an unrelated client is insufficient. This is a fork-specific switch, not an upstream or Paseo setting.
 
-Offline tests exercise the real Pi 0.87.1 SDK RPC loop with a synthetic provider and child processes. They cover idle/busy/fast completion, mixed tool calls, cancellation and resume. Full Paseo adapter-to-UI acceptance and real-model instruction following remain unverified.
+Offline tests exercise the real Pi 0.87.1 SDK RPC loop with a synthetic provider and child processes. They cover idle/busy/fast completion, mixed tool calls, cancellation and resume.
+
+On 2026-10-20, a real Paseo 0.12.0 session also passed: the parent yielded, a background child completed, and the parent automatically continued 28.7 seconds later without a second user message. Both used GPT-6.1 Sol with high thinking. Paseo CLI/MCP and both Pi transcripts confirmed one completion and an idle final state. This used an isolated extension configuration; it was not a screenshot check or a live-model test of every installed extension.
 
 ## Install and validate
 
