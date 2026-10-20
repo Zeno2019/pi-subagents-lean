@@ -1,6 +1,6 @@
 # pi-subagents-lean
 
-Lean fork of [edxeth/pi-subagents](https://github.com/edxeth/pi-subagents), based on **v2.9.2 (`cf6dbf4`)** and tested against **Pi 0.87.1**. On 2026-10-20, that release was also upstream's latest `main`.
+Lean fork of [edxeth/pi-subagents](https://github.com/edxeth/pi-subagents), based on **v2.9.2 (`cf6dbf4`)**. On 2026-10-20, that release was also upstream's latest `main`.
 
 This fork keeps Markdown agent definitions, the `subagent` / `subagent_resume` / `subagent_kill` tools, model allowlists, thinking settings, permissions and upstream execution handlers. Its `src/lean.ts` entrypoint shortens tool descriptions and roster instructions. The roster's agent entries and model choices are preserved verbatim. The original `src/index.ts` remains available for comparison.
 
@@ -14,9 +14,13 @@ PI_SUBAGENT_RPC_ASYNC=1 pi --mode rpc
 
 An asynchronous Markdown preset then returns a started result immediately. Completion arrives through `followUp` and can trigger another parent turn. The parent may do independent work, including in a mixed tool batch. Explicitly synchronous presets still wait.
 
-The switch is **off by default**. Print (`-p` / `--print`), JSON and ordinary TUI launches retain upstream behavior. Set the environment variable on the actual Pi RPC host; setting it on an unrelated client is insufficient. This is a fork-specific switch, not an upstream or Paseo setting.
+The switch is **off by default**. Print (`-p` / `--print`), JSON and ordinary TUI launches retain upstream behavior. Set the environment variable on the actual Pi RPC host; setting it on an unrelated client is insufficient. This switch is provided by this fork.
 
-For Paseo 0.12.0, merge this into `$HOME/.paseo/config.json`:
+Offline tests exercise the real Pi SDK RPC loop with a synthetic provider and child processes. They cover idle/busy/fast completion, mixed tool calls, cancellation and resume.
+
+### Optional Paseo integration
+
+Paseo users can set the switch in `$HOME/.paseo/config.json`:
 
 ```json
 {
@@ -30,11 +34,7 @@ For Paseo 0.12.0, merge this into `$HOME/.paseo/config.json`:
 }
 ```
 
-Preserve existing provider fields and other environment variables. Run `paseo reload --json`, check that `agents.providers` was applied, then open a new Pi session. Already-running Pi processes retain their existing environment. Paseo's native provider setting is sufficient; no Paseo plugin is required.
-
-Offline tests exercise the real Pi 0.87.1 SDK RPC loop with a synthetic provider and child processes. They cover idle/busy/fast completion, mixed tool calls, cancellation and resume.
-
-On 2026-10-20, a real Paseo 0.12.0 session also passed: the parent yielded, a background child completed, and the parent automatically continued 28.7 seconds later without a second user message. Both used GPT-6.1 Sol with high thinking. Paseo CLI/MCP and both Pi transcripts confirmed one completion and an idle final state. This used an isolated extension configuration; it was not a screenshot check or a live-model test of every installed extension.
+Preserve existing configuration, run `paseo reload --json`, then open a new Pi session. Already-running processes retain their environment. Other durable RPC hosts can provide the same environment variable directly.
 
 ## Install and validate
 
@@ -44,11 +44,11 @@ After choosing to replace the original package, use:
 pi install git:github.com/Zeno2019/pi-subagents-lean
 ```
 
-The default branch targets Pi 0.87.1 and loads `src/lean.ts` directly. Pi supplies the optional host peers; this extension has no production dependencies, build step or installation lifecycle scripts.
+Pi loads `src/lean.ts` directly. Pi supplies the optional host peers; this extension has no production dependencies, build step or installation lifecycle scripts.
 
-Load only one of this fork and the original package in a session: they register the same tool names. Installation alone does not enable the RPC switch. Pi 1.x compatibility is not claimed.
+Load only one of this fork and the original package in a session: they register the same tool names. Installation alone does not enable the RPC switch.
 
-Development checks use Node 24 and the lockfile's Pi 0.87.1 SDK:
+Development checks use Node 24 and the SDK versions in the lockfile:
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
@@ -58,7 +58,7 @@ npm run test:rpc
 npm run measure:lean
 ```
 
-`measure:lean` reads the effective local agent definitions and prints aggregate character counts, not token counts or the definitions themselves. With the maintainer's six presets, tool metadata plus roster text decreased from **15,111 to 8,614 characters (43%)**, while model choices stayed intact. This is not a claim about the entire Pi request.
+`measure:lean` reads the effective local agent definitions and prints aggregate character counts, not token counts or the definitions themselves. Results depend on the installed presets and do not measure the whole Pi request.
 
 See [MAINTENANCE.md](MAINTENANCE.md) for the patch boundaries and validation limits. The following documentation describes the upstream implementation; the fork-specific RPC opt-in above takes precedence where relevant.
 
