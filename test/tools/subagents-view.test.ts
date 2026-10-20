@@ -412,7 +412,7 @@ describe("subagents-view overlay", () => {
 	describe("wrapping", () => {
 		it("hard-wraps long paths without adding ellipses", () => {
 			const path =
-				"/home/devkit/.local/share/tia/pi-agent/sessions/very-long-session-file-name-that-must-stay-copyable.jsonl";
+				"/tmp/pi-subagents-fixture/sessions/very-long-session-file-name-that-must-stay-copyable.jsonl";
 			const lines = wrapPlainText(path, 24, Number.MAX_SAFE_INTEGER);
 			assert.equal(lines.join(""), path);
 			assert.ok(!lines.join("\n").includes("…"));

@@ -73,7 +73,7 @@ const parentPrompt = [
 console.log("[live-fork-compact] tmp:", tmpRoot);
 console.log("[live-fork-compact] parent model:", PARENT_MODEL);
 
-const piBin = "/home/devkit/.bun/bin/pi";
+const piBin = process.env.PI_E2E_PI_BIN ?? "pi";
 const env = {
 	...process.env,
 	PI_PACKAGE_DIR: "",

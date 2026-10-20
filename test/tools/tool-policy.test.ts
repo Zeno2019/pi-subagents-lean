@@ -354,8 +354,8 @@ describe("tool policy", () => {
 				"npm:pi-subagents",
 			]);
 			assert.deepEqual(
-				getExtensionLaunchArgsForTest(["/home/u/.pi/agent/extensions/pi-subagents/src/index.ts"], "/tmp/done.ts", true),
-				["--no-extensions", "-e", "/tmp/done.ts", "-e", "/home/u/.pi/agent/extensions/pi-subagents/src/index.ts"],
+				getExtensionLaunchArgsForTest(["/tmp/pi-subagents-fixture/extensions/pi-subagents/src/index.ts"], "/tmp/done.ts", true),
+				["--no-extensions", "-e", "/tmp/done.ts", "-e", "/tmp/pi-subagents-fixture/extensions/pi-subagents/src/index.ts"],
 			);
 		});
 
