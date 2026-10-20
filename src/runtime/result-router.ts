@@ -1,4 +1,5 @@
 import { outstandingWork } from "./outstanding-work.ts";
+import { isRpcAsyncHost } from "./rpc-async.ts";
 import type { CompletedSubagentResult, RunningSubagent, SubagentPingMessageDetails, SubagentResult } from "../types.ts";
 import { formatContextExitNotice, formatFinalContextUsage, formatSessionRef } from "./final-context-usage.ts";
 import { releaseSpawnWidthSlot } from "./spawn-width.ts";
@@ -89,7 +90,8 @@ export function deliverCompletedSubagentResult(
 	return completed;
 }
 
-function getCompletedResultDeliveryMode(): "nextTurn" | "steer" {
+function getCompletedResultDeliveryMode(): "nextTurn" | "steer" | "followUp" {
+	if (isRpcAsyncHost()) return "followUp";
 	// A result that lands while the parent is still unwinding its async-launch
 	// batch waits for the next human prompt, so the chat does not stay in the
 	// Working state and swallow the operator's next input as a steer. An

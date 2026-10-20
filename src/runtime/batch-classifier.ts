@@ -7,7 +7,7 @@ import {
 	SUBAGENT_TOOL_NAME,
 } from "../tools/tool-names.ts";
 import type { SubagentParamsInput } from "../types.ts";
-import { markSubagentBatchBlocking } from "./state.ts";
+import { isCoordinatorOnlyTurnDisabled, markSubagentBatchBlocking } from "./state.ts";
 
 type ToolCallLike = {
 	type: "toolCall";
@@ -21,10 +21,6 @@ type AssistantMessageLike = {
 };
 
 type AgentDefaultsLoader = (agent: string | undefined, cwd: string | undefined) => AgentDefaults | null;
-
-function isCoordinatorOnlyTurnDisabled(): boolean {
-	return process.env.PI_SUBAGENT_DISABLE_COORDINATOR_ONLY_TURN === "1";
-}
 
 function getToolCalls(message: AssistantMessageLike): ToolCallLike[] {
 	if (!message || message.role !== "assistant") return [];
@@ -97,8 +93,8 @@ function isAsyncSubagentLaunch(call: ToolCallLike, loadAgentDefaults: AgentDefau
  * one. This sidesteps Pi's `every()` batch-termination contract for mixed
  * batches without forging `terminate` on built-in tool results.
  *
- * No-op when PI_SUBAGENT_DISABLE_COORDINATOR_ONLY_TURN=1, matching the kill-
- * switch for the existing coordinator-only-turn behavior.
+ * No-op when coordinator-only stopping is disabled, including opted-in RPC
+ * hosts that can receive background results while doing independent work.
  */
 export function classifyAssistantMessageForMixedBatch(
 	message: AssistantMessageLike,

@@ -13,6 +13,7 @@ import {
 import type { SubagentLaunchContext } from "../launch/prep.ts";
 import { parseSpawnEnv, resolveSpawnPolicy } from "../spawn/policy.ts";
 import { findRunningSubagent } from "../runtime/running-registry.ts";
+import { isRpcAsyncHost } from "../runtime/rpc-async.ts";
 import {
 	asSubagentToolResult,
 	getCoordinatorOnlyTurnPrompt,
@@ -345,10 +346,11 @@ export function markInitialPromptLaunchComplete(): void {
 
 /**
  * A session with no durable turn for later steer delivery: no UI, or a
- * one-shot `pi -p` / `--mode json|rpc` run. Every launch in it is awaited, so
- * no helper ever reports later.
+ * one-shot `pi -p` / `--mode json|rpc` run, unless its durable RPC host opts in
+ * to background delivery. Headless launches otherwise wait for every helper.
  */
 export function isHeadlessLaunchSession(hasUI: boolean, argv = process.argv): boolean {
+	if (isRpcAsyncHost(argv)) return false;
 	return !hasUI || isOneShotPromptInvocation(argv);
 }
 
@@ -357,11 +359,11 @@ export function shouldForceSynchronousLaunch(hasUI: boolean, argv = process.argv
 	return isHeadlessLaunchSession(hasUI, argv) || startupPromptActive;
 }
 
-function getAfterLaunchPrompt(): string {
+export function getAfterLaunchPrompt(): string {
 	// The tool is registered before any extension context exists, so only the
 	// argv-based one-shot check is available here. Background children are
 	// `pi -p` processes, which is the case that matters.
-	if (isOneShotPromptInvocation()) {
+	if (isHeadlessLaunchSession(true)) {
 		return (
 			"After launch:\n" +
 			"- In this session every launch waits for the helper and returns its report as the tool result. Read the report and continue; do not redo delegated work.\n" +
@@ -373,7 +375,7 @@ function getAfterLaunchPrompt(): string {
 		"- If a helper returns later, continue only with clearly independent work. Do not redo delegated work and do not claim the helper's findings before its later message appears.\n" +
 		"- If no safe independent work is clear, stop your response and wait for the later helper message.\n" +
 		"- Ask the user only when there is a plausible next step but ownership is ambiguous.\n" +
-		"Results arrive automatically as a steer message that starts a new turn. " +
+		`Results arrive automatically as a ${isRpcAsyncHost() ? "follow-up" : "steer"} message that starts a new turn. ` +
 		"Do not poll, sleep-read, or check session files — the harness handles delivery.\n" +
 		getCoordinatorOnlyTurnPrompt()
 	);

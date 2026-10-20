@@ -3,6 +3,7 @@ import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { getSubagentTerminalStopReason } from "../session/session.ts";
 import type { CompletedSubagentResult, RunningSubagent, SubagentCompletionStatus, SubagentResult } from "../types.ts";
 import { releaseSpawnWidthSlot, resetSpawnWidthForTest } from "./spawn-width.ts";
+import { isRpcAsyncHost } from "./rpc-async.ts";
 import { SubagentWidgetManager } from "./widget.ts";
 
 export const runningSubagents = outstandingWork.running;
@@ -120,8 +121,8 @@ export function isSubagentBatchBlocking(): boolean {
 	return currentSubagentBatchHasBlocking;
 }
 
-function isCoordinatorOnlyTurnDisabled(): boolean {
-	return process.env.PI_SUBAGENT_DISABLE_COORDINATOR_ONLY_TURN === "1";
+export function isCoordinatorOnlyTurnDisabled(): boolean {
+	return process.env.PI_SUBAGENT_DISABLE_COORDINATOR_ONLY_TURN === "1" || isRpcAsyncHost();
 }
 
 export function requestSubagentBatchStop(): void {
