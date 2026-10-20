@@ -296,7 +296,17 @@ describe("orchestrator runtime persistence", () => {
 		controller.handleSessionStart(runtime.ctx);
 
 		const result = controller.beforeAgentStart({
-			systemPromptOptions: { cwd: "/tmp", appendSystemPrompt: "keep this" },
+			systemPromptOptions: {
+				cwd: "/tmp",
+				appendSystemPrompt: "keep this",
+				selectedTools: [],
+				toolSnippets: {},
+				toolGuidelines: {},
+				promptGuidelines: [],
+				sections: {},
+				contextFiles: [],
+				skills: [],
+			},
 		});
 		assert.ok(result);
 		assert.match(result.systemPrompt, /keep this$/);

@@ -1,4 +1,48 @@
-# pi-subagents
+# pi-subagents-lean
+
+Lean fork of [edxeth/pi-subagents](https://github.com/edxeth/pi-subagents), based on **v2.9.2 (`cf6dbf4`)** and tested against **Pi 0.87.1**. On 2026-10-20, that release was also upstream's latest `main`.
+
+This fork keeps Markdown agent definitions, the `subagent` / `subagent_resume` / `subagent_kill` tools, model allowlists, thinking settings, permissions and upstream execution handlers. Its `src/lean.ts` entrypoint shortens tool descriptions and roster instructions. The roster's agent entries and model choices are preserved verbatim. The original `src/index.ts` remains available for comparison.
+
+## Durable RPC background execution
+
+An explicit opt-in enables background results for a host that keeps its Pi RPC session open:
+
+```sh
+PI_SUBAGENT_RPC_ASYNC=1 pi --mode rpc
+```
+
+An asynchronous Markdown preset then returns a started result immediately. Completion arrives through `followUp` and can trigger another parent turn. The parent may do independent work, including in a mixed tool batch. Explicitly synchronous presets still wait.
+
+The switch is **off by default**. Print (`-p` / `--print`), JSON and ordinary TUI launches retain upstream behavior. Set the environment variable on the actual Pi RPC host; setting it on an unrelated client is insufficient. This is a fork-specific switch, not an upstream or Paseo setting.
+
+Offline tests exercise the real Pi 0.87.1 SDK RPC loop with a synthetic provider and child processes. They cover idle/busy/fast completion, mixed tool calls, cancellation and resume. Full Paseo adapter-to-UI acceptance and real-model instruction following remain unverified.
+
+## Install and validate
+
+After choosing to replace the original package, use:
+
+```sh
+pi install git:github.com/Zeno2019/pi-subagents-lean
+```
+
+Load only one of this fork and the original package in a session: they register the same tool names. Installation alone does not enable the RPC switch. Pi 1.x compatibility is not claimed.
+
+Development checks use Node 24 and the lockfile's Pi 0.87.1 SDK:
+
+```sh
+bun install --frozen-lockfile --ignore-scripts
+bunx tsc --noEmit
+npm test
+npm run test:rpc
+npm run measure:lean
+```
+
+`measure:lean` reads the effective local agent definitions and prints aggregate character counts, not token counts or the definitions themselves. With the maintainer's six presets, tool metadata plus roster text decreased from **15,111 to 8,614 characters (43%)**, while model choices stayed intact. This is not a claim about the entire Pi request.
+
+See [MAINTENANCE.md](MAINTENANCE.md) for the patch boundaries and validation limits. The following documentation describes the upstream implementation; the fork-specific RPC opt-in above takes precedence where relevant.
+
+# Upstream documentation
 
 `pi-subagents` is a highly curated multi-agent framework for [Pi agent harness](https://github.com/earendil-works/pi).
 
@@ -24,7 +68,7 @@ Special thanks to [@FasalZein](https://github.com/FasalZein) and [@isthatyousaf]
 ## Install
 
 ```bash
-pi install git:github.com/edxeth/pi-subagents
+pi install git:github.com/Zeno2019/pi-subagents-lean
 ```
 
 ## The model

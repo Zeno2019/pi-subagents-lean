@@ -56,6 +56,7 @@ import "./spawn/policy.test.ts";
 import "./runtime/launch-results.test.ts";
 import "./runtime/result-router.test.ts";
 import "./runtime/rpc-async.test.ts";
+import "./lean/metadata.test.ts";
 import "./runtime/coordinator-turn-hardening.test.ts";
 import "./runtime/background-watch.test.ts";
 import "./runtime/background-watch-timeout.test.ts";
