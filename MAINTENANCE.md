@@ -51,6 +51,8 @@ Before replacing an existing installation:
 5. If Hashline replaced the built-in editor, editing roles need `replace`, `insert` and `undo_last_change` instead of `edit`; search roles need `anchor_grep` instead of `grep`. Keep those editing tools out of read-only roles.
 6. Preserve the user's permission policy. The local policy used in acceptance asks for approval before `subagent`; background execution does not grant permission to bypass that approval.
 
+Paseo 0.12.0 supports the persistent environment setting natively at `agents.providers.pi.env` in `$HOME/.paseo/config.json`. Its installed config loader parses provider overrides into runtime settings, and `buildPiLaunch` merges their environment with session overrides. `paseo reload --json` applied `agents.providers` without a restart requirement on the tested daemon. Session-specific values take precedence. This was confirmed from the installed application, correcting an earlier incomplete investigation that had only found the session-open plugin hook.
+
 ## Updating upstream
 
 1. Fetch `upstream` and inspect release notes, SDK dependencies and APIs before merging. Do not upgrade the user's Pi runtime to satisfy a new upstream release.
