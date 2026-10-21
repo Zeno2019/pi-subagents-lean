@@ -1,4 +1,5 @@
 import type { CompletedSubagentResult, ParentClosePolicy, ParentShutdownAction, RunningSubagent } from "../types.ts";
+import { recordSubagentOutcome } from "./activity-evidence.ts";
 import { clearSubagentShutdownTimer } from "./state.ts";
 
 export type ShutdownSubagentsOptions = {
@@ -69,6 +70,8 @@ export async function shutdownSubagentsForParentExit(
 		agent.deliveryState = "detached";
 
 		if (agent.parentClosePolicy === "continue") {
+			agent.evidenceDetached = true;
+			recordSubagentOutcome(agent.evidence, { id: agent.id, name: agent.name, task: agent.task, agent: agent.agent, sessionFile: agent.noSession ? undefined : agent.sessionFile, status: "detached" });
 			actions.push({
 				id: agent.id,
 				policy: agent.parentClosePolicy,
@@ -82,6 +85,7 @@ export async function shutdownSubagentsForParentExit(
 			policy: agent.parentClosePolicy,
 			action: "terminate",
 		});
+		recordSubagentOutcome(agent.evidence, { id: agent.id, name: agent.name, task: agent.task, agent: agent.agent, sessionFile: agent.noSession ? undefined : agent.sessionFile, status: "cancelled", error: "cancelled", elapsed: Math.round((Date.now() - agent.startTime) / 1000) });
 		if (agent.mode === "interactive") {
 			await terminateInteractiveSubagent(agent, runtime);
 		} else {

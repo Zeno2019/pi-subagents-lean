@@ -42,3 +42,9 @@ export function getSessionArtifactDir(cwd: string, sessionId: string): string {
 export function resolveSessionArtifactPath(cwd: string, sessionId: string, name: string): string {
 	return resolve(getSessionArtifactDir(cwd, sessionId), name);
 }
+
+export function getSubagentEvidencePaths(cwd: string, sessionFile: string, runId: string) {
+	const safe = (value: string) => value.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^\.+$/, "run");
+	const dir = join(getSessionArtifactDir(cwd, safe(basename(sessionFile, ".jsonl"))), "subagents", safe(runId));
+	return { activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+}

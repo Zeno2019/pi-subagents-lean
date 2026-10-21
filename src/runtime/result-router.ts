@@ -1,3 +1,4 @@
+import { formatSubagentEvidence, recordSubagentOutcome } from "./activity-evidence.ts";
 import { outstandingWork } from "./outstanding-work.ts";
 import { isRpcAsyncHost } from "./rpc-async.ts";
 import type { CompletedSubagentResult, RunningSubagent, SubagentPingMessageDetails, SubagentResult } from "../types.ts";
@@ -41,6 +42,7 @@ export function routeSubagentOutcome(options: RouteSubagentOutcomeOptions): Rout
 	const { pi, running, result, formatElapsed, updateWidget } = options;
 	clearSubagentShutdownTimer(running);
 	if (result.ping) {
+		if (!running.evidenceDetached) recordSubagentOutcome(running.evidence, { ...result, id: running.id, agent: running.agent, status: "pinged" });
 		runningSubagents.delete(running.id);
 		updateWidget();
 		if (running.allowSteerDelivery === false) {
@@ -81,7 +83,7 @@ export function deliverCompletedSubagentResult(
 	outstandingWork.delivery(completed.id, () => pi.sendMessage(
 		{
 			customType: "subagent_result",
-			content: getCompletedSubagentContent(completed, formatElapsed, `${sessionRef}${contextRef}`),
+			content: getCompletedSubagentContent(completed, formatElapsed, `${sessionRef}${contextRef}${formatSubagentEvidence(completed.evidence)}`),
 			display: true,
 			details: getCompletedResultDetails(completed),
 		},
@@ -113,6 +115,7 @@ function getCompletedContextReference(completed: CompletedSubagentResult): strin
 
 function getCompletedResultDetails(completed: CompletedSubagentResult): Record<string, unknown> {
 	return {
+		...(completed.evidence ? { evidence: completed.evidence } : {}),
 		id: completed.id,
 		name: completed.name,
 		task: completed.task,
@@ -152,9 +155,10 @@ function deliverSubagentPing(
 			customType: "subagent_ping",
 			content:
 				`Sub-agent "${ping.name}" needs help (${formatElapsed(result.elapsed)}).\n\n` +
-				`${ping.message}${sessionRef}`,
+				`${ping.message}${sessionRef}${formatSubagentEvidence(running.evidence)}`,
 			display: true,
 			details: {
+				...(running.evidence ? { evidence: running.evidence } : {}),
 				id: running.id,
 				name: ping.name,
 				task: running.task,

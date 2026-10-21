@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { AgentDefaults } from "../agents/definitions.ts";
 import { loadAgentDefaults as loadAgentDefaultsFromDefinitions } from "../agents/definitions.ts";
 import { getArtifactStorageRoot } from "../artifact-storage.ts";
+import { ACTIVITY_FILE_ENV, ACTIVITY_RUN_ENV } from "../runtime/activity.ts";
 import {
 	buildIdentityBlock,
 	type PersistedSubagentLaunchMetadata,
@@ -479,6 +480,10 @@ export function getBaseSubagentEnvVars(
 	const sessionMode = resolveEffectiveSessionMode(params, prepared.agentDefs);
 	if (sessionMode !== "standalone") if (prepared.sessionFile) envVars.PI_SUBAGENT_PARENT_SESSION = prepared.sessionFile;
 	envVars.PI_ARTIFACT_PROJECT_ROOT = getArtifactStorageRoot();
+	// Only the owner of a new run may set these; nested/untracked children must
+	// never append to their parent's evidence through inherited/configured env.
+	envVars[ACTIVITY_FILE_ENV] = "";
+	envVars[ACTIVITY_RUN_ENV] = "";
 	return envVars;
 }
 

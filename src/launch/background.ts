@@ -1,3 +1,4 @@
+import { createSubagentEvidence, formatSubagentEvidence, getSubagentEvidenceEnv, recordSubagentOutcome } from "../runtime/activity-evidence.ts";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -136,56 +137,64 @@ export async function launchBackgroundSubagent(
 	const plan = await buildBackgroundLaunchPlan(params, ctx);
 	const { launch, invocation, denyPatterns } = plan;
 	const { prepared, noSession } = launch;
+	const evidence = createSubagentEvidence({ cwd: launch.forcedCwd ?? prepared.runtimePaths.effectiveCwd ?? ctx.cwd, sessionFile: prepared.subagentSessionFile, id, name: params.name, agent: params.agent, task: params.task });
+	try {
 
-	const startTime = Date.now();
-	const { envVars, launchEntryCount } = launch;
-	// The child receives the parent's clock so its launch contract and any
-	// report-only continuation match the deadline the watcher enforces.
-	if (prepared.agentDefs?.timeout || prepared.agentDefs?.idleTimeout) {
-		envVars[PI_SUBAGENT_TIMEOUT_STARTED_AT] = String(startTime);
+		const startTime = Date.now();
+		const { envVars, launchEntryCount } = launch;
+		Object.assign(envVars, getSubagentEvidenceEnv(evidence));
+		// The child receives the parent's clock so its launch contract and any
+		// report-only continuation match the deadline the watcher enforces.
+		if (prepared.agentDefs?.timeout || prepared.agentDefs?.idleTimeout) {
+			envVars[PI_SUBAGENT_TIMEOUT_STARTED_AT] = String(startTime);
+		}
+		clearSubagentExitSidecar(prepared.subagentSessionFile);
+		const child = spawn(invocation.command, invocation.args, {
+			cwd: launch.forcedCwd ?? prepared.runtimePaths.effectiveCwd ?? ctx.cwd,
+			detached: true,
+			stdio:
+				resolveSubagentParentClosePolicy(prepared.agentDefs) === "continue"
+					? ["ignore", "ignore", "ignore"]
+					: ["ignore", "pipe", "pipe"],
+			env: getSubagentChildProcessEnv(invocation, envVars, denyPatterns),
+		});
+		child.unref();
+		const running: RunningSubagent = {
+			evidence,
+			id,
+			name: params.name,
+			task: params.task,
+			title: getSubagentDisplayTitle(params),
+			agent: params.agent,
+			mode: "background",
+			executionState: "running",
+			deliveryState: "detached",
+			parentClosePolicy: resolveSubagentParentClosePolicy(prepared.agentDefs),
+			blocking: params.blocking ?? false,
+			async: params.async ?? !(params.blocking ?? false),
+			autoExit: prepared.agentDefs?.autoExit ?? false,
+			noSession,
+			reportContextUsage: resolveSubagentReportContextUsage(prepared.agentDefs),
+			...resolveSubagentTimeoutState(prepared.agentDefs),
+			childProcess: child,
+			startTime,
+			sessionFile: prepared.subagentSessionFile,
+			launchEntryCount,
+			modelContextWindow: runtime.getContextWindow(prepared.effectiveModel),
+			modelRef: prepared.effectiveModelRef,
+			launchMetadata: launch.launchMetadata,
+		};
+		const rememberTail = (current: string | undefined, chunk: Buffer | string) =>
+			`${current ?? ""}${chunk.toString()}`.slice(-4000);
+		child.stdout?.on("data", (chunk) => {
+			running.stdoutTail = rememberTail(running.stdoutTail, chunk);
+		});
+		child.stderr?.on("data", (chunk) => {
+			running.stderrTail = rememberTail(running.stderrTail, chunk);
+		});
+		return running;
+	} catch (error) {
+		recordSubagentOutcome(evidence, { status: "failed", id, name: params.name, agent: params.agent, task: params.task, sessionFile: noSession ? undefined : prepared.subagentSessionFile, error: String(error) });
+		throw new Error(`${error instanceof Error ? error.message : String(error)}${formatSubagentEvidence(evidence)}`, { cause: error });
 	}
-	clearSubagentExitSidecar(prepared.subagentSessionFile);
-	const child = spawn(invocation.command, invocation.args, {
-		cwd: launch.forcedCwd ?? prepared.runtimePaths.effectiveCwd ?? ctx.cwd,
-		detached: true,
-		stdio:
-			resolveSubagentParentClosePolicy(prepared.agentDefs) === "continue"
-				? ["ignore", "ignore", "ignore"]
-				: ["ignore", "pipe", "pipe"],
-		env: getSubagentChildProcessEnv(invocation, envVars, denyPatterns),
-	});
-	child.unref();
-	const running: RunningSubagent = {
-		id,
-		name: params.name,
-		task: params.task,
-		title: getSubagentDisplayTitle(params),
-		agent: params.agent,
-		mode: "background",
-		executionState: "running",
-		deliveryState: "detached",
-		parentClosePolicy: resolveSubagentParentClosePolicy(prepared.agentDefs),
-		blocking: params.blocking ?? false,
-		async: params.async ?? !(params.blocking ?? false),
-		autoExit: prepared.agentDefs?.autoExit ?? false,
-		noSession,
-		reportContextUsage: resolveSubagentReportContextUsage(prepared.agentDefs),
-		...resolveSubagentTimeoutState(prepared.agentDefs),
-		childProcess: child,
-		startTime,
-		sessionFile: prepared.subagentSessionFile,
-		launchEntryCount,
-		modelContextWindow: runtime.getContextWindow(prepared.effectiveModel),
-		modelRef: prepared.effectiveModelRef,
-		launchMetadata: launch.launchMetadata,
-	};
-	const rememberTail = (current: string | undefined, chunk: Buffer | string) =>
-		`${current ?? ""}${chunk.toString()}`.slice(-4000);
-	child.stdout?.on("data", (chunk) => {
-		running.stdoutTail = rememberTail(running.stdoutTail, chunk);
-	});
-	child.stderr?.on("data", (chunk) => {
-		running.stderrTail = rememberTail(running.stderrTail, chunk);
-	});
-	return running;
 }

@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { deliverCompletedSubagentResult, routeSubagentOutcome } from "../../src/runtime/result-router.ts";
 import { buildCompletedSubagentResult, requestSubagentBatchStop } from "../../src/runtime/state.ts";
 import type { RunningSubagent, SubagentResult } from "../../src/types.ts";
 import {
 	afterEach,
 	assert,
+	createTestDir,
 	describe,
 	getCompletedSubagentResultForTest,
 	it,
@@ -491,5 +494,64 @@ describe("result router", () => {
 			triggerTurn: true,
 			deliverAs: "steer",
 		});
+	});
+});
+
+
+describe("result routing evidence", () => {
+	afterEach(() => resetSubagentStateForTest());
+	for (const pinged of [false, true]) {
+		it(`exposes durable evidence in ${pinged ? "help requests" : "completion reports"}`, () => {
+			const dir = createTestDir();
+			const evidence = { runId: "router-run", activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+			const messages: unknown[] = [];
+			routeSubagentOutcome({ pi: { sendMessage(message: unknown) { messages.push(message); } }, running: makeRunning({ evidence }), result: makeResult(pinged ? { ping: { name: "Result child", message: "Need access" } } : {}), formatElapsed: String, updateWidget() {} });
+			const message = messages[0] as { content: string; details: { evidence: unknown } };
+			assert.match(message.content, /Activity:/);
+			assert.ok(message.content.includes(evidence.activityFile));
+			assert.ok(message.content.includes(evidence.resultFile));
+			assert.equal(message.details.evidence, evidence);
+			assert.equal(JSON.parse(readFileSync(evidence.resultFile, "utf8")).status, pinged ? "pinged" : "completed");
+		});
+	}
+});
+
+// These paths bypass ordinary result routing but must retain the same evidence contract.
+describe("launch and watcher evidence", () => {
+	afterEach(() => resetSubagentStateForTest());
+	it("returns activity and result paths as soon as an asynchronous child starts", async () => {
+		const { getLaunchedSubagentResult } = await import("../../src/runtime/running-registry.ts");
+		const dir = createTestDir();
+		const evidence = { runId: "started", activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+		const started = await getLaunchedSubagentResult(makeRunning({ evidence }), { formatElapsed: String, updateWidget() {}, async waitForSubagentResult() { throw new Error("must stay asynchronous"); }, asSubagentToolResult: (result) => result });
+		assert.ok(started.content[0].text.includes(evidence.activityFile));
+		assert.ok(started.content[0].text.includes(evidence.resultFile));
+		assert.equal(started.details.evidence, evidence);
+	});
+
+	it("retains rejected watcher failures for subsequent dispatch", async () => {
+		const { wireSubagentSteerBack } = await import("../../src/runtime/running-registry.ts");
+		const dir = createTestDir();
+		const evidence = { runId: "watcher-error", activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+		const messages: unknown[] = [];
+		wireSubagentSteerBack({ sendMessage(message: unknown) { messages.push(message); } } as Parameters<typeof wireSubagentSteerBack>[0], makeRunning({ evidence }), Promise.reject(new Error("watcher exploded")), String, () => {});
+		await new Promise((resolve) => setImmediate(resolve));
+		const saved = JSON.parse(readFileSync(evidence.resultFile, "utf8"));
+		assert.equal(saved.status, "failed");
+		assert.match(saved.error, /watcher exploded/);
+		assert.ok((messages[0] as { content: string }).content.includes(evidence.resultFile));
+	});
+});
+
+
+describe("no-session cancellation evidence", () => {
+	it("omits the temporary session path when explicitly stopped", async () => {
+		const { stopRunningSubagent } = await import("../../src/runtime/running-registry.ts");
+		const dir = createTestDir();
+		const evidence = { runId: "no-session", activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+		await stopRunningSubagent(makeRunning({ evidence, noSession: true }), async () => {});
+		const saved = JSON.parse(readFileSync(evidence.resultFile, "utf8"));
+		assert.equal(saved.status, "cancelled");
+		assert.equal(saved.sessionFile, undefined);
 	});
 });

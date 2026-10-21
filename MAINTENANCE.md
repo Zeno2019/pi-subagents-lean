@@ -10,6 +10,28 @@
 
 ## Patch ownership
 
+`src/runtime/activity.ts` projects child extension events into bounded JSONL
+activity records. The mandatory child helper installs it; child stdout and the
+launch/notification lifecycle retain their existing roles. `activity-evidence.ts`
+owns nonthrowing evidence creation and atomic outcome snapshots, using paths from
+`artifact-storage.ts`. Launch and resume allocate distinct evidence identities;
+timeout wrap-up reuses the run. The parent runtime remains authoritative for final
+status, including failures that cannot emit child hooks. Detached observations are
+nonterminal. Preserve this distinction when adding recovery or UI consumers.
+
+Regression tests cover event projection, bounded files, outcome durability,
+failure/cancel/ping delivery, and headless operation. Run the existing RPC suite as
+well: evidence reads must not consume or duplicate completion delivery. Do not
+change agent Todo allowlists or add a global task store as part of observability.
+
+For live recorder verification, run `scripts/test-e2e-live-activity.mjs` with a
+user-selected `PI_SUBAGENT_LIVE_MODEL=provider/model` (repeat for a second family).
+The real SDK RPC parent uses synthetic responses and the child uses the live
+model. The smoke checks in-flight output, public phases, an intentional tool
+error, terminal evidence and one completion delivery. It copies auth/model config
+to a private temporary directory and removes the entire test environment afterward.
+It does not verify interactive mux rendering or detached-parent restart recovery.
+
 `src/runtime/rpc-async.ts` defines the explicit RPC-only opt-in. The launch guard, coordinator stop policy, mixed-batch classifier and completion delivery share it. The switch does not override an agent's explicit synchronous setting. Resume uses the same launch guard. Keep print-mode children synchronous even when they inherit the environment variable.
 
 `src/lean.ts` wraps upstream registration. `src/lean/metadata.ts` changes only known tool descriptions, schema descriptions, prompt snippets and roster prose. It retains schema fields and constraints, Typebox symbols, handlers, tool names and agent entries. Unknown roster rules pass through unchanged so a future upstream rule is not silently deleted. Upstream lifecycle instructions remain the source for mode-specific prompt text.

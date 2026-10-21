@@ -36,6 +36,39 @@ Paseo users can set the switch in `$HOME/.paseo/config.json`:
 
 Preserve existing configuration, run `paseo reload --json`, then open a new Pi session. Already-running processes retain their environment. Other durable RPC hosts can provide the same environment variable directly.
 
+## On-demand progress and failure evidence
+
+Ordinary child launches and resumes return two paths in the tool result text:
+
+- `activity.jsonl`: timestamped tool starts, bounded arguments/output, tool errors,
+  public progress text, and the active Todo step when the child uses `todo`.
+- `result.json`: a structured record of the parent runtime's outcome, including
+  failure/timeout details, partial output, recent activity, and a resumable session
+  path when available. Initial `pending` and `terminal: false` mean no final
+  verdict was recorded; use the activity stream for current progress.
+
+The package's existing child helper records events directly, including in
+headless/RPC children and interactive panes. It does not require a separate local
+extension, a JSON stdout mode, or a new model-facing tool. Read the returned files
+on demand (for example, the last 20 lines of `activity.jsonl` with `bash`); completion
+still arrives through the existing delivery mechanism. Activity text is evidence,
+not a new instruction or a proof of task completion. A silent log does not prove a
+child is stuck. An orchestrator without file-reading tools must use its existing
+delegation capabilities to inspect the evidence.
+
+Each launch/resume gets its own run directory under the existing artifact storage
+root. Timeout wrap-up continues the same run. Activity rotates at approximately
+1 MiB and retains one `.previous` segment; individual output records are truncated.
+Evidence remains after completion, failure, and `no-session` transcript cleanup.
+Thinking content and image payloads are not recorded. Failed children need not
+summarize themselves: the parent also records observed crashes, timeouts, and
+cancellation. If the parent exits with `parent-close-policy: continue`, activity
+can keep growing, but the parent result stays nonterminal `detached`; there is no
+automatic recovery of the parent watcher after restart. Full automatic-retry
+traces are not collected. Todo permissions and per-session isolation are unchanged.
+Like session transcripts, these local diagnostic files can contain sensitive
+command arguments and public tool output; they are written with private permissions.
+
 ## Install and validate
 
 After choosing to replace the original package, use:

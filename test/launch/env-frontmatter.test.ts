@@ -156,6 +156,15 @@ describe("env frontmatter field", () => {
 		assert.equal(typeof env.PI_SUBAGENT_NAME, "string");
 	});
 
+	it("clears activity destinations until the launcher assigns the child's own run", () => {
+		const env = getBaseSubagentEnvVarsForTest({
+			env: "PI_SUBAGENT_ACTIVITY_FILE=parent.jsonl\nPI_SUBAGENT_RUN_ID=parent-run",
+		});
+		assert.equal(env.PI_SUBAGENT_ACTIVITY_FILE, "");
+		assert.equal(env.PI_SUBAGENT_RUN_ID, "");
+		assert.equal(getBaseSubagentEnvVarsForTest(null).PI_SUBAGENT_ACTIVITY_FILE, "");
+	});
+
 	it("passes context-warn-threshold and step as child-owned internal env vars", () => {
 		const env = getBaseSubagentEnvVarsForTest({
 			contextWarnThreshold: "80%",

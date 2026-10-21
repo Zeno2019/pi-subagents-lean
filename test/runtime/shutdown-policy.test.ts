@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
 import { shutdownSubagentsForParentExit } from "../../src/runtime/shutdown.ts";
+import { buildCompletedSubagentResult } from "../../src/runtime/state.ts";
+import type { RunningSubagent } from "../../src/types.ts";
 import {
 	afterEach,
 	assert,
@@ -133,5 +136,21 @@ describe("subagent shutdown policy", () => {
 
 		assert.equal(sent.length, 0);
 		assert.equal(getCompletedSubagentResultForTest(abandon.id), undefined);
+	});
+});
+
+
+describe("shutdown evidence", () => {
+	it("records cancellation for terminated children and preserves detached evidence for continued children", async () => {
+		for (const policy of ["terminate", "continue"] as const) {
+			const dir = createTestDir();
+			const evidence = { runId: policy, activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+			const running: RunningSubagent = { id: policy, name: policy, task: "work", mode: "background", executionState: "running", deliveryState: "detached", parentClosePolicy: policy, startTime: Date.now(), sessionFile: join(dir, "session.jsonl"), evidence, abortController: new AbortController() };
+			await shutdownSubagentsForParentExit({ runningSubagents: new Map([[policy, running]]), completedSubagentResults: new Map(), parentCloseEscalationMs: 1, updateWidget() {}, async closeRunningSurface() {} });
+			buildCompletedSubagentResult(running, { name: policy, task: "work", summary: "watcher stopped", error: "cancelled", exitCode: 1, elapsed: 1 });
+			const saved = JSON.parse(readFileSync(evidence.resultFile, "utf8"));
+			assert.equal(saved.status, policy === "terminate" ? "cancelled" : "detached");
+			assert.equal(saved.terminal, policy === "terminate");
+		}
 	});
 });

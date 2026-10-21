@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	afterEach,
 	assert,
+	createTestDir,
 	describe,
 	getCompletedSubagentResultForTest,
 	it,
@@ -29,10 +32,21 @@ describe("subagent wait behavior", () => {
 			startTime: Date.now(),
 			sessionFile: result.sessionFile,
 			completionPromise: Promise.resolve(result),
+			evidence: result.evidence,
 		};
 		setRunningSubagentForTest(running);
 		return waitForSubagentForTest({ id: running.id });
 	}
+
+	it("persists and exposes evidence for synchronous results", async () => {
+		const dir = createTestDir();
+		const evidence = { runId: "wait-evidence", activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+		const result = await waitForResult({ name: "child", task: "work", summary: "implemented", exitCode: 1, elapsed: 1, evidence });
+		assert.ok((result.content[0] as { text: string }).text.includes(evidence.activityFile));
+		assert.ok((result.content[0] as { text: string }).text.includes(evidence.resultFile));
+		assert.equal((result.details as { evidence: unknown }).evidence, evidence);
+		assert.equal(JSON.parse(readFileSync(evidence.resultFile, "utf8")).status, "failed");
+	});
 
 	it("includes salvaged child output in provider error results", async () => {
 		const waited = await waitForResult({

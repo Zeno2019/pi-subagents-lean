@@ -1,6 +1,8 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { buildCompletedSubagentResult, getWatcherSignal } from "../../src/runtime/state.ts";
 import type { RunningSubagent, SubagentResult } from "../../src/types.ts";
-import { assert, describe, it } from "../support/index.ts";
+import { assert, createTestDir, describe, it } from "../support/index.ts";
 
 function makeRunning(overrides: Partial<RunningSubagent> = {}): RunningSubagent {
 	return {
@@ -173,5 +175,30 @@ describe("getSubagentCompletionStatus (via buildCompletedSubagentResult)", () =>
 			}),
 		);
 		assert.equal(result.errorMessage, "Provider timeout");
+	});
+});
+
+
+describe("runtime completion evidence", () => {
+	it("persists the existing completion classification and failure context", () => {
+		for (const result of [makeResult(), makeResult({ exitCode: 0, errorMessage: "provider failed" }), makeResult({ exitCode: 1, timedOut: "timeout", timedOutAfter: 5 }), makeResult({ error: "cancelled", exitCode: 1 })]) {
+			const dir = createTestDir();
+			const evidence = { runId: "evidence-run", activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+			const completed = buildCompletedSubagentResult(makeRunning({ evidence }), result);
+			const saved = JSON.parse(readFileSync(evidence.resultFile, "utf8"));
+			assert.equal(saved.status, completed.status);
+			assert.equal(saved.terminal, true);
+			assert.equal(saved.summary, result.summary);
+			assert.equal(saved.error, result.errorMessage ?? result.error);
+			assert.equal(saved.timedOut, result.timedOut);
+			assert.equal(completed.evidence, evidence);
+		}
+	});
+
+	it("does not invent a terminal outcome when the parent left the child running", () => {
+		const dir = createTestDir();
+		const evidence = { runId: "detached-run", activityFile: join(dir, "activity.jsonl"), resultFile: join(dir, "result.json") };
+		buildCompletedSubagentResult(makeRunning({ evidence, evidenceDetached: true }), makeResult({ error: "cancelled", exitCode: 1 }));
+		assert.equal(existsSync(evidence.resultFile), false);
 	});
 });

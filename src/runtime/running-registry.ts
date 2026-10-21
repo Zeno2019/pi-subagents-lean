@@ -1,3 +1,4 @@
+import { formatSubagentEvidence, recordSubagentOutcome } from "./activity-evidence.ts";
 import { outstandingWork } from "./outstanding-work.ts";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { CompletedSubagentResult, RunningSubagent, StartedSubagentToolDetails, SubagentResult } from "../types.ts";
@@ -110,6 +111,7 @@ export async function stopRunningSubagent(
 	closeSurface: (running: RunningSubagent) => Promise<void>,
 ): Promise<void> {
 	clearSubagentShutdownTimer(running);
+	recordSubagentOutcome(running.evidence, { id: running.id, name: running.name, task: running.task, agent: running.agent, sessionFile: running.noSession ? undefined : running.sessionFile, status: "cancelled", error: "cancelled", elapsed: Math.round((Date.now() - running.startTime) / 1000) });
 	running.abortController?.abort();
 
 	// Always kill the child process/surface regardless of abortController.
@@ -132,6 +134,7 @@ export function getStartedSubagentDetails(
 	running: RunningSubagent,
 ): StartedSubagentToolDetails & Record<string, unknown> {
 	return {
+		...(running.evidence ? { evidence: running.evidence } : {}),
 		id: running.id,
 		name: running.name,
 		title: running.title,
@@ -160,7 +163,7 @@ function getStartedSubagentResult(running: RunningSubagent) {
 					(isAsync
 						? `Results will be delivered automatically as a steer message when it finishes. `
 						: `The parent is waiting for this result before continuing. `) +
-					`Use this exact id if you need to resume or stop this child.`,
+					`Use this exact id if you need to resume or stop this child.` + formatSubagentEvidence(running.evidence),
 			},
 		],
 		details: getStartedSubagentDetails(running),
@@ -251,15 +254,17 @@ export function wireSubagentSteerBack(
 			handleDetachedSubagentOutcome(pi, running, result, formatElapsed, updateWidget);
 		})
 		.catch((err) => {
+			if (!running.evidenceDetached) recordSubagentOutcome(running.evidence, { id: running.id, name: running.name, task: running.task, agent: running.agent, sessionFile: running.noSession ? undefined : running.sessionFile, status: "failed", error: err?.message ?? String(err), elapsed: Math.round((Date.now() - running.startTime) / 1000) });
 			releaseSpawnWidthSlot(running);
 			runningSubagents.delete(running.id);
 			updateWidget();
 			outstandingWork.delivery(running.id, () => pi.sendMessage(
 				{
 					customType: "subagent_result",
-					content: `Sub-agent "${running.name}" error: ${err?.message ?? String(err)}`,
+					content: `Sub-agent "${running.name}" error: ${err?.message ?? String(err)}${formatSubagentEvidence(running.evidence)}`,
 					display: true,
 					details: {
+						...(running.evidence ? { evidence: running.evidence } : {}),
 						id: running.id,
 						name: running.name,
 						task: running.task,

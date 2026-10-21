@@ -81,6 +81,13 @@ for (const s of scenarios) {
 			(e) => e.type === "tool_execution_end" && e.toolName === "subagent",
 		);
 		assert.equal(launch.isError, false, text(launch));
+		const evidence = launch.result.details.evidence;
+		assert.ok(
+			evidence?.activityFile && evidence?.resultFile,
+			"launch exposes evidence paths",
+		);
+		assert.ok(launch.result.content[0].text.includes(evidence.activityFile));
+		assert.ok(launch.result.content[0].text.includes(evidence.resultFile));
 		const sync = s.baseline || s.enabled === false;
 		if (sync) {
 			assert.equal(launch.result.details.status, "completed", text(launch));
@@ -156,6 +163,22 @@ for (const s of scenarios) {
 			(e) =>
 				e.type === "message_end" && e.message?.customType === "subagent_result",
 		);
+		const outcome = JSON.parse(fs.readFileSync(evidence.resultFile, "utf8"));
+		assert.equal(outcome.status, s.cancel ? "cancelled" : "completed");
+		assert.equal(outcome.terminal, true);
+		if (s.cancel) {
+			const resumed = client.events.find(
+				(e) => e.type === "tool_execution_end" && e.toolName === "probe_resume",
+			).result;
+			assert.notEqual(resumed.details.evidence.runId, evidence.runId);
+			assert.ok(
+				resumed.content[0].text.includes(resumed.details.evidence.activityFile),
+			);
+			const resumedOutcome = JSON.parse(
+				fs.readFileSync(resumed.details.evidence.resultFile, "utf8"),
+			);
+			assert.equal(resumedOutcome.status, "completed");
+		}
 		results.push({
 			name: s.name,
 			passed: true,

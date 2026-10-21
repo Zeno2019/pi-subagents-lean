@@ -135,6 +135,12 @@ describe("subagent_resume approval args", () => {
 			const running = await resumeSubagentSession({ sessionFile, mode: "background" }, createResumeRuntime());
 
 			assert.equal(running.childProcess?.spawnargs.includes("--no-approve"), true);
+			assert.ok(running.evidence?.activityFile);
+			assert.ok(running.evidence?.resultFile);
+			const resumed = await resumeSubagentSession({ sessionFile, mode: "background" }, createResumeRuntime());
+			assert.notEqual(resumed.evidence?.runId, running.evidence?.runId);
+			assert.notEqual(resumed.evidence?.activityFile, running.evidence?.activityFile);
+			assert.notEqual(resumed.evidence?.resultFile, running.evidence?.resultFile);
 		} finally {
 			if (originalCommand == null) delete process.env.PI_SUBAGENT_PI_COMMAND;
 			else process.env.PI_SUBAGENT_PI_COMMAND = originalCommand;

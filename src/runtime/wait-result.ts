@@ -1,3 +1,4 @@
+import { formatSubagentEvidence, recordSubagentOutcome, type SubagentEvidence } from "./activity-evidence.ts";
 import { randomUUID } from "node:crypto";
 import type { CompletedSubagentResult, DeliveryState, RunningSubagent, SubagentResult, WaitParams } from "../types.ts";
 import { formatContextExitNotice, formatFinalContextUsage, formatSessionRef } from "./final-context-usage.ts";
@@ -7,6 +8,7 @@ import { formatTimeoutOutcome, formatTimeoutWrapUpOutcome, getTimeoutResultDetai
 import { formatElapsed } from "./wiring.ts";
 
 function getSubagentWaitPingResult(running: RunningSubagent, result: SubagentResult, deliveryState: DeliveryState) {
+	recordSubagentOutcome(running.evidence, { ...result, id: running.id, agent: running.agent, status: "pinged" });
 	return {
 		content: [
 			{
@@ -14,10 +16,11 @@ function getSubagentWaitPingResult(running: RunningSubagent, result: SubagentRes
 				text:
 					`Sub-agent "${running.name}" requested help and exited. ` +
 					`Resume it with subagent_resume using sessionFile ${result.sessionFile ?? "(missing)"}.` +
-					`\n\nMessage from the subagent:\n${result.ping?.message ?? ""}`,
+					`\n\nMessage from the subagent:\n${result.ping?.message ?? ""}${formatSubagentEvidence(running.evidence)}`,
 			},
 		],
 		details: {
+			...(running.evidence ? { evidence: running.evidence } : {}),
 			id: running.id,
 			name: running.name,
 			agent: running.agent,
@@ -71,8 +74,9 @@ function getSubagentWaitSuccessResult(cached: CompletedSubagentResult) {
 				: `Sub-agent "${cached.name}" ${verb} (exit ${cached.exitCode}).\n\n${cached.summary}${sessionRef}${contextRef}`;
 	}
 	return {
-		content: [{ type: "text", text }],
+		content: [{ type: "text", text: text + formatSubagentEvidence(cached.evidence) }],
 		details: {
+			...(cached.evidence ? { evidence: cached.evidence } : {}),
 			id: cached.id,
 			name: cached.name,
 			agent: cached.agent,
@@ -99,7 +103,7 @@ function getSubagentWaitSuccessResult(cached: CompletedSubagentResult) {
 
 function getSubagentWaitErrorResult(message: string, error: string, extra: Record<string, unknown> = {}) {
 	return {
-		content: [{ type: "text", text: message }],
+		content: [{ type: "text", text: message + formatSubagentEvidence(extra.evidence as SubagentEvidence | undefined) }],
 		details: { error, ...extra },
 	};
 }
@@ -147,6 +151,7 @@ export async function waitForSubagentResult(params: WaitParams, runtime: WaitRun
 	if (!running.completionPromise) {
 		return getSubagentWaitErrorResult(`Sub-agent "${running.name}" is missing completion tracking.`, "not_found", {
 			id: running.id,
+			...(running.evidence ? { evidence: running.evidence } : {}),
 		});
 	}
 
@@ -182,6 +187,7 @@ export async function waitForSubagentResult(params: WaitParams, runtime: WaitRun
 				runtime.updateWidget();
 				return getSubagentWaitErrorResult(`Waiting for sub-agent "${running.name}" was interrupted.`, "interrupted", {
 					id: running.id,
+					...(running.evidence ? { evidence: running.evidence } : {}),
 				});
 			}
 			races.push(
@@ -220,6 +226,7 @@ export async function waitForSubagentResult(params: WaitParams, runtime: WaitRun
 			runtime.updateWidget();
 			return getSubagentWaitErrorResult(`Waiting for sub-agent "${running.name}" was interrupted.`, "interrupted", {
 				id: running.id,
+				...(running.evidence ? { evidence: running.evidence } : {}),
 			});
 		}
 		if (params.onTimeout === "return_pending" || params.onTimeout === "detach" || params.onTimeout === "return") {
@@ -227,11 +234,12 @@ export async function waitForSubagentResult(params: WaitParams, runtime: WaitRun
 				content: [
 					{
 						type: "text",
-						text: `Sub-agent "${running.name}" is still running.`,
+						text: `Sub-agent "${running.name}" is still running.${formatSubagentEvidence(running.evidence)}`,
 					},
 				],
 				details: {
 					id: running.id,
+					...(running.evidence ? { evidence: running.evidence } : {}),
 					status: "pending" as const,
 					deliveryState: "detached" as const,
 					timeout: params.timeout,
@@ -240,6 +248,7 @@ export async function waitForSubagentResult(params: WaitParams, runtime: WaitRun
 		}
 		return getSubagentWaitErrorResult(`Timed out waiting for sub-agent "${running.name}".`, "timeout", {
 			id: running.id,
+			...(running.evidence ? { evidence: running.evidence } : {}),
 			timeout: params.timeout,
 		});
 	} finally {

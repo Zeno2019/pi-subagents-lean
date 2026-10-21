@@ -1,3 +1,4 @@
+import { createSubagentEvidence, formatSubagentEvidence, getSubagentEvidenceEnv, recordSubagentOutcome } from "./activity-evidence.ts";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -440,142 +441,150 @@ async function resumeSubagentSessionWithoutWidth(
 	resumeEnvVars.PI_ARTIFACT_PROJECT_ROOT = getArtifactStorageRoot();
 
 	const id = Math.random().toString(16).slice(2, 10);
-	const running: RunningSubagent = {
-		id,
-		name,
-		task: task ?? "resumed session",
-		agent: resumedAgent,
-		mode: metadata.mode,
-		executionState: "running",
-		deliveryState: "detached",
-		parentClosePolicy: invocationMetadata?.parentClosePolicy ?? metadata.parentClosePolicy ?? "terminate",
-		async: resumedAsync,
-		blocking: resumedAsync === false,
-		autoExit: resumedAutoExit,
-		reportContextUsage: invocationMetadata?.reportContextUsage ?? true,
-		...resolveSubagentTimeoutState({
-			timeout: resumedTimeout,
-			idleTimeout: resumedIdleTimeout,
-			timeoutWarnThreshold: invocationMetadata?.timeoutWarnThreshold,
-			onTimeout: invocationMetadata?.onTimeout ?? (previousTimeout?.blocksResume ? "block-resume" : undefined),
-		}),
-		startTime: resumeStartTime,
-		sessionFile,
-		launchEntryCount: entryCountBefore,
-		modelContextWindow: runtime.getContextWindow(invocationMetadata?.model ?? invocationMetadata?.modelRef),
-		modelRef: invocationMetadata?.modelRef,
-		launchMetadata: resumedInvocationMetadata,
-	};
+	const evidence = createSubagentEvidence({ cwd: resumeCwd ?? process.cwd(), sessionFile, id, name, agent: resumedAgent, task: task ?? "resumed session" });
+	Object.assign(resumeEnvVars, getSubagentEvidenceEnv(evidence));
+	try {
+		const running: RunningSubagent = {
+			evidence,
+			id,
+			name,
+			task: task ?? "resumed session",
+			agent: resumedAgent,
+			mode: metadata.mode,
+			executionState: "running",
+			deliveryState: "detached",
+			parentClosePolicy: invocationMetadata?.parentClosePolicy ?? metadata.parentClosePolicy ?? "terminate",
+			async: resumedAsync,
+			blocking: resumedAsync === false,
+			autoExit: resumedAutoExit,
+			reportContextUsage: invocationMetadata?.reportContextUsage ?? true,
+			...resolveSubagentTimeoutState({
+				timeout: resumedTimeout,
+				idleTimeout: resumedIdleTimeout,
+				timeoutWarnThreshold: invocationMetadata?.timeoutWarnThreshold,
+				onTimeout: invocationMetadata?.onTimeout ?? (previousTimeout?.blocksResume ? "block-resume" : undefined),
+			}),
+			startTime: resumeStartTime,
+			sessionFile,
+			launchEntryCount: entryCountBefore,
+			modelContextWindow: runtime.getContextWindow(invocationMetadata?.model ?? invocationMetadata?.modelRef),
+			modelRef: invocationMetadata?.modelRef,
+			launchMetadata: resumedInvocationMetadata,
+		};
 
-	if (metadata.mode === "background") {
-		const invocation = getPiInvocation([
-			...buildResumePiArgs(sessionFile, "background"),
-			...extensionArgs,
-			...parityArgs,
-		]);
-		const child = spawn(invocation.command, invocation.args, {
-			...(resumeCwd ? { cwd: resumeCwd } : {}),
-			detached: true,
-			stdio:
-				running.parentClosePolicy === "continue"
-					? (["pipe", "ignore", "ignore"] as const)
-					: (["pipe", "pipe", "pipe"] as const),
-			env: getSubagentChildProcessEnv(invocation, resumeEnvVars, resolveDenyEnvPatterns(invocationMetadata?.denyEnv)),
-		});
-		if (expandedTask !== undefined) {
-			child.stdin?.end(expandedTask);
-		} else {
-			child.stdin?.end();
-		}
-		child.unref();
-		running.childProcess = child;
-		child.stdout?.on("data", (chunk: Buffer) => {
-			running.stdoutTail = rememberTail(running.stdoutTail, chunk);
-		});
-		child.stderr?.on("data", (chunk: Buffer) => {
-			running.stderrTail = rememberTail(running.stderrTail, chunk);
-		});
-	} else {
-		const surfaceName = invocationMetadata?.sessionTitle ?? displayName;
-		const backend = getMuxBackend();
-		const herdrContext =
-			backend === "herdr"
-				? {
-						policy: resolveResumeHerdrPlacementPolicy(invocationMetadata, process.env.PI_SUBAGENT_HERDR_PLACEMENT),
-					}
-				: undefined;
-		const parentPaneId = Number(process.env.ZELLIJ_PANE_ID);
-		const configuredZellijPolicy = resolveResumeZellijPlacementPolicy(
-			invocationMetadata,
-			process.env.PI_SUBAGENT_ZELLIJ_PLACEMENT,
-		);
-		const zellijContext =
-			invocationMetadata?.zellijPlacementGroupKey && Number.isInteger(parentPaneId)
-				? {
-						groupKey: invocationMetadata.zellijPlacementGroupKey,
-						parentPaneId,
-						policy: configuredZellijPolicy,
-					}
-				: undefined;
-		const zellijTarget = backend === "zellij" ? await resolveZellijTarget() : undefined;
-		const ordinarySurface = zellijTarget
-			? undefined
-			: await createSurface(surfaceName, {
-					herdr: herdrContext,
-					zellij: zellijContext,
-				});
-		const doneSentinelFile = getDoneSentinelFile(sessionFile, id);
-		const piArgs = buildResumePiArgs(sessionFile, "interactive");
-		piArgs.push(...extensionArgs, ...parityArgs);
-		if (expandedTask !== undefined) {
-			const taskPath = writeResumeTaskArtifact(name, expandedTask, sessionFile, resumeCwd ?? process.cwd());
-			piArgs.push(`@${taskPath}`);
-		}
-		if (zellijTarget) resumeEnvVars.ZELLIJ_SESSION_NAME = zellijTarget.sessionName;
-		if (ordinarySurface) resumeEnvVars.PI_SUBAGENT_SURFACE = ordinarySurface;
-		const { command, dispose } = buildInteractiveShellCommand({
-			cwd: resumeCwd ?? undefined,
-			piArgs,
-			envOverrides: resumeEnvVars,
-			denyEnv: invocationMetadata?.denyEnv,
-			doneSentinelFile,
-			...(zellijTarget ? { deriveZellijPaneSurface: true } : {}),
-		});
-		try {
-			const surface =
-				ordinarySurface ??
-				(await createZellijCommandSurface(surfaceName, zellijTarget!, getZellijShellCommand(command), zellijContext));
-			if (!zellijTarget) {
-				await new Promise<void>((resolve) => setTimeout(resolve, runtime.getShellReadyDelayMs()));
-				sendShellCommand(surface, command);
+		if (metadata.mode === "background") {
+			const invocation = getPiInvocation([
+				...buildResumePiArgs(sessionFile, "background"),
+				...extensionArgs,
+				...parityArgs,
+			]);
+			const child = spawn(invocation.command, invocation.args, {
+				...(resumeCwd ? { cwd: resumeCwd } : {}),
+				detached: true,
+				stdio:
+					running.parentClosePolicy === "continue"
+						? (["pipe", "ignore", "ignore"] as const)
+						: (["pipe", "pipe", "pipe"] as const),
+				env: getSubagentChildProcessEnv(invocation, resumeEnvVars, resolveDenyEnvPatterns(invocationMetadata?.denyEnv)),
+			});
+			if (expandedTask !== undefined) {
+				child.stdin?.end(expandedTask);
+			} else {
+				child.stdin?.end();
 			}
-			running.surface = surface;
-			running.doneSentinelFile = doneSentinelFile;
-			running.zellijTarget = zellijTarget;
-		} catch (error) {
-			// Nothing consumed the capsule; do not leave credentials behind.
-			dispose();
-			throw error;
+			child.unref();
+			running.childProcess = child;
+			child.stdout?.on("data", (chunk: Buffer) => {
+				running.stdoutTail = rememberTail(running.stdoutTail, chunk);
+			});
+			child.stderr?.on("data", (chunk: Buffer) => {
+				running.stderrTail = rememberTail(running.stderrTail, chunk);
+			});
+		} else {
+			const surfaceName = invocationMetadata?.sessionTitle ?? displayName;
+			const backend = getMuxBackend();
+			const herdrContext =
+				backend === "herdr"
+					? {
+							policy: resolveResumeHerdrPlacementPolicy(invocationMetadata, process.env.PI_SUBAGENT_HERDR_PLACEMENT),
+						}
+					: undefined;
+			const parentPaneId = Number(process.env.ZELLIJ_PANE_ID);
+			const configuredZellijPolicy = resolveResumeZellijPlacementPolicy(
+				invocationMetadata,
+				process.env.PI_SUBAGENT_ZELLIJ_PLACEMENT,
+			);
+			const zellijContext =
+				invocationMetadata?.zellijPlacementGroupKey && Number.isInteger(parentPaneId)
+					? {
+							groupKey: invocationMetadata.zellijPlacementGroupKey,
+							parentPaneId,
+							policy: configuredZellijPolicy,
+						}
+					: undefined;
+			const zellijTarget = backend === "zellij" ? await resolveZellijTarget() : undefined;
+			const ordinarySurface = zellijTarget
+				? undefined
+				: await createSurface(surfaceName, {
+						herdr: herdrContext,
+						zellij: zellijContext,
+					});
+			const doneSentinelFile = getDoneSentinelFile(sessionFile, id);
+			const piArgs = buildResumePiArgs(sessionFile, "interactive");
+			piArgs.push(...extensionArgs, ...parityArgs);
+			if (expandedTask !== undefined) {
+				const taskPath = writeResumeTaskArtifact(name, expandedTask, sessionFile, resumeCwd ?? process.cwd());
+				piArgs.push(`@${taskPath}`);
+			}
+			if (zellijTarget) resumeEnvVars.ZELLIJ_SESSION_NAME = zellijTarget.sessionName;
+			if (ordinarySurface) resumeEnvVars.PI_SUBAGENT_SURFACE = ordinarySurface;
+			const { command, dispose } = buildInteractiveShellCommand({
+				cwd: resumeCwd ?? undefined,
+				piArgs,
+				envOverrides: resumeEnvVars,
+				denyEnv: invocationMetadata?.denyEnv,
+				doneSentinelFile,
+				...(zellijTarget ? { deriveZellijPaneSurface: true } : {}),
+			});
+			try {
+				const surface =
+					ordinarySurface ??
+					(await createZellijCommandSurface(surfaceName, zellijTarget!, getZellijShellCommand(command), zellijContext));
+				if (!zellijTarget) {
+					await new Promise<void>((resolve) => setTimeout(resolve, runtime.getShellReadyDelayMs()));
+					sendShellCommand(surface, command);
+				}
+				running.surface = surface;
+				running.doneSentinelFile = doneSentinelFile;
+				running.zellijTarget = zellijTarget;
+			} catch (error) {
+				// Nothing consumed the capsule; do not leave credentials behind.
+				dispose();
+				throw error;
+			}
 		}
-	}
 
-	if (shouldPersistInvocationMetadata) {
-		if (invocationMetadata.modelSource === "resume-override") {
-			writeSubagentModelStateEntries(sessionFile, invocationMetadata);
+		if (shouldPersistInvocationMetadata) {
+			if (invocationMetadata.modelSource === "resume-override") {
+				writeSubagentModelStateEntries(sessionFile, invocationMetadata);
+			}
+			if (resumedInvocationMetadata) writeSubagentLaunchMetadataEntry(sessionFile, resumedInvocationMetadata);
 		}
-		if (resumedInvocationMetadata) writeSubagentLaunchMetadataEntry(sessionFile, resumedInvocationMetadata);
+		runtime.runningSubagents.set(id, running);
+		runtime.startWidgetRefresh();
+
+		const watcherAbort = new AbortController();
+		running.abortController = watcherAbort;
+		running.completionPromise =
+			metadata.mode === "background"
+				? runtime.watchBackgroundSubagent(running, runtime.getWatcherSignal(running, watcherAbort))
+				: runtime.watchSubagent(running, runtime.getWatcherSignal(running, watcherAbort));
+
+		return running;
+	} catch (error) {
+		recordSubagentOutcome(evidence, { status: "failed", id, name, agent: resumedAgent, task: task ?? "resumed session", sessionFile, error: String(error) });
+		throw new Error(`${error instanceof Error ? error.message : String(error)}${formatSubagentEvidence(evidence)}`, { cause: error });
 	}
-	runtime.runningSubagents.set(id, running);
-	runtime.startWidgetRefresh();
-
-	const watcherAbort = new AbortController();
-	running.abortController = watcherAbort;
-	running.completionPromise =
-		metadata.mode === "background"
-			? runtime.watchBackgroundSubagent(running, runtime.getWatcherSignal(running, watcherAbort))
-			: runtime.watchSubagent(running, runtime.getWatcherSignal(running, watcherAbort));
-
-	return running;
 }
 
 function rememberTail(current: string | undefined, chunk: Buffer | string): string {

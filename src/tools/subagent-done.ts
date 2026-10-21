@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ACTIVITY_FILE_ENV, installActivityRecorder } from "../runtime/activity.ts";
 import {
 	endedAtToolUseBoundary,
 	findLatestAssistantError,
@@ -97,6 +98,7 @@ export function installDeniedToolGuards(
 }
 
 export default function (pi: ExtensionAPI) {
+	installActivityRecorder(pi);
 	const typebox = optionalRequire("typebox") as typeof import("typebox") | null;
 	const doneParams = typebox?.Type?.Object
 		? typebox.Type.Object({})
@@ -256,7 +258,13 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("before_agent_start", (event) => {
 		enforceDeniedTools();
-		return applyChildSystemPromptOverrides(event);
+		const overrides = applyChildSystemPromptOverrides(event);
+		if (!process.env[ACTIVITY_FILE_ENV]) return overrides;
+		return {
+			systemPrompt: `${overrides?.systemPrompt ?? event.systemPrompt}\n\n` +
+				"For multi-step work, briefly state meaningful phase changes and blockers in public progress text. " +
+				"If using todo, keep its current step accurate. Avoid narrating every tool call or claiming unverified completion.",
+		};
 	});
 
 	pi.on("message_end", (event, ctx) => {

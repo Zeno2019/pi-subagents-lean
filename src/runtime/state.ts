@@ -1,3 +1,4 @@
+import { recordSubagentOutcome } from "./activity-evidence.ts";
 import { outstandingWork } from "./outstanding-work.ts";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { getSubagentTerminalStopReason } from "../session/session.ts";
@@ -44,9 +45,10 @@ export function buildCompletedSubagentResult(
 	running: RunningSubagent,
 	result: SubagentResult,
 ): CompletedSubagentResult {
-	return {
+	const completed: CompletedSubagentResult = {
 		...result,
 		id: running.id,
+		evidence: running.evidence,
 		agent: running.agent,
 		mode: running.mode,
 		status: getSubagentCompletionStatus(result, running),
@@ -57,6 +59,8 @@ export function buildCompletedSubagentResult(
 		reportContextUsage: running.reportContextUsage,
 		deliveredTo: null,
 	};
+	if (!running.evidenceDetached) recordSubagentOutcome(running.evidence, completed);
+	return completed;
 }
 
 export function cacheCompletedSubagentResult(

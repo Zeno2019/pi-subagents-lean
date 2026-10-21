@@ -56,6 +56,8 @@ import "./agents/enabled-toggle.test.ts";
 import "./spawn/policy.test.ts";
 import "./runtime/launch-results.test.ts";
 import "./runtime/result-router.test.ts";
+import "./runtime/activity.test.ts";
+import "./runtime/activity-evidence.test.ts";
 import "./runtime/rpc-async.test.ts";
 import "./lean/metadata.test.ts";
 import "./runtime/coordinator-turn-hardening.test.ts";

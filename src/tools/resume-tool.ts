@@ -1,6 +1,7 @@
 import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { formatSubagentEvidence } from "../runtime/activity-evidence.ts";
 import { endedUnderContextPressure } from "../session/completion-reason.ts";
 import { readSubagentTimeoutSidecar } from "../session/timeout-sidecar.ts";
 import { type ResumeServiceRuntime, resumeSubagentSession } from "../runtime/resume-service.ts";
@@ -183,7 +184,7 @@ export function registerSubagentResumeTool(
 				content: [
 					{
 						type: "text" as const,
-						text: `Session "${running.name}" resumed.`,
+						text: `Session "${running.name}" resumed.${formatSubagentEvidence(running.evidence)}`,
 					},
 				],
 				details: {
@@ -193,6 +194,7 @@ export function registerSubagentResumeTool(
 					status: "started" as const,
 					deliveryState: "detached" as const,
 					async: running.async,
+					...(running.evidence ? { evidence: running.evidence } : {}),
 				},
 				...getSubagentBatchStopMetadata(),
 			};

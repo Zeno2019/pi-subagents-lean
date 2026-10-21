@@ -376,7 +376,7 @@ export function getAfterLaunchPrompt(): string {
 		"- If no safe independent work is clear, stop your response and wait for the later helper message.\n" +
 		"- Ask the user only when there is a plausible next step but ownership is ambiguous.\n" +
 		`Results arrive automatically as a ${isRpcAsyncHost() ? "follow-up" : "steer"} message that starts a new turn. ` +
-		"Do not poll, sleep-read, or check session files — the harness handles delivery.\n" +
+		"Read the returned activity and run-evidence files on demand for progress or failure diagnosis; do not repeatedly poll for completion.\n" +
 		getCoordinatorOnlyTurnPrompt()
 	);
 }

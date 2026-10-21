@@ -1,3 +1,4 @@
+import { createSubagentEvidence, formatSubagentEvidence, getSubagentEvidenceEnv, recordSubagentOutcome } from "../runtime/activity-evidence.ts";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSubagentDisplayTitle, isSetTabTitleToolEnabled } from "../agents/titles.ts";
@@ -53,192 +54,200 @@ export async function launchInteractiveSubagent(
 		mode: "interactive",
 	});
 	const { prepared, sessionMode, noSession, directTask } = launch;
-	traceSubagentLaunch("interactive.prepared", {
-		id,
-		name: params.name,
-		agent: params.agent,
-		sessionMode,
-		sessionFile: prepared.subagentSessionFile,
-		cwd: prepared.runtimePaths.effectiveCwd,
-		model: prepared.effectiveModelRef,
-		skills: prepared.effectiveSkills,
-		injectSkills: prepared.effectiveInjectSkills,
-	});
-	const surfacePreCreated = !!options?.surface;
-	const surfaceName = prepared.sessionTitle ?? params.name;
-	const herdrContext = {
-		policy: launch.launchMetadata.herdrPlacementPolicy,
-	};
-	const parentPaneId = Number(process.env.ZELLIJ_PANE_ID);
-	const zellijContext =
-		launch.launchMetadata.zellijPlacementGroupKey && Number.isInteger(parentPaneId)
-			? {
-					groupKey: launch.launchMetadata.zellijPlacementGroupKey,
-					parentPaneId,
-					policy: launch.launchMetadata.zellijPlacementPolicy,
-				}
-			: undefined;
-	const doneSentinelFile = getDoneSentinelFile(prepared.subagentSessionFile, id);
-	const modeHint = prepared.agentDefs?.autoExit
-		? "Complete your task autonomously."
-		: "Manual lifecycle: the operator must close this foreground pane when done. Stay in this pane and wait for the operator to interact with you. Do not exit on your own. The operator can interact with you at any time.";
-	const summaryInstruction = prepared.agentDefs?.autoExit
-		? "Your FINAL assistant message should summarize what you accomplished."
-		: "After writing your response, stay in this pane for operator interaction. Do not exit. The operator will close the pane when finished.";
-	const agentType = params.agent ?? params.name;
-	const tabTitleInstruction =
-		!isSetTabTitleToolEnabled() || prepared.denySet.has(SET_TAB_TITLE_TOOL_NAME)
-			? ""
-			: `As your FIRST action, set the tab title using set_tab_title. ` +
-				`The title MUST start with [${agentType}] followed by a short description of your current task. ` +
-				`Example: "[${agentType}] Analyzing auth module". Keep it concise.`;
-	const roleBlock = getPreparedRoleBlock(prepared);
-	const expandedTask = await expandSubagentTask(params.task, {
-		enabled: prepared.agentDefs?.taskExpansion === "shell",
-		cwd: prepared.runtimePaths.effectiveCwd ?? ctx.cwd,
-	});
-	let fullTask = directTask
-		? expandedTask
-		: `${roleBlock}\n\n${modeHint}\n\n${tabTitleInstruction}\n\n${expandedTask}\n\n${summaryInstruction}`;
-	const skillInjection = getPreparedSkillInjection(prepared);
-	if (skillInjection) fullTask = `${skillInjection}\n\n${fullTask}`;
-
-	const piArgs = getPreparedSessionLaunchArgs(prepared);
-	const subagentDonePath = join(dirname(dirname(fileURLToPath(import.meta.url))), "tools", "subagent-done.ts");
-	for (const arg of getPreparedExtensionLaunchArgs(prepared, subagentDonePath)) {
-		piArgs.push(arg);
-	}
-
-	piArgs.push(...getPreparedModelArgs(prepared));
-	if (resolveSubagentNoContextFiles(prepared.agentDefs)) {
-		piArgs.push("--no-context-files");
-	}
-
-	const appendSystemPlan = buildAppendSystemInheritancePlan({
-		inheritAppendSystem: launch.launchMetadata.inheritAppendSystem === true,
-		systemPromptMode: launch.launchMetadata.systemPromptMode,
-		systemPrompt: launch.launchMetadata.systemPrompt,
-		boundarySystemPrompt: launch.boundarySystemPrompt ? CHILD_CONTEXT_BOUNDARY_SYSTEM_PROMPT : undefined,
-	});
-	for (let i = 0; i < appendSystemPlan.promptArgs.length; i += 2) {
-		const flag = appendSystemPlan.promptArgs[i];
-		const text = appendSystemPlan.promptArgs[i + 1] ?? "";
-		const value = flag === "--system-prompt" ? writeSystemPromptArtifact(params.name, text, ctx) : text;
-		piArgs.push(flag, value);
-	}
-	for (const arg of getApprovalLaunchArgs(prepared.agentDefs, "interactive")) {
-		piArgs.push(arg);
-	}
-	for (const arg of getSubagentToolLaunchArgs(
-		prepared.effectiveTools,
-		prepared.denySet,
-		isPreparedChildSpawningAllowed(prepared),
-	)) {
-		piArgs.push(arg);
-	}
-	for (const arg of getPreparedSkillLaunchArgs(prepared)) {
-		piArgs.push(arg);
-	}
-	for (const flag of getFlagsLaunchArgs(prepared.agentDefs?.flags)) {
-		piArgs.push(flag);
-	}
-
-	const startTime = Date.now();
-	const zellijTarget = !surfacePreCreated && getMuxBackend() === "zellij" ? await resolveZellijTarget() : undefined;
-	const ordinarySurface = zellijTarget
-		? undefined
-		: (options?.surface ??
-			(await createSurface(surfaceName, {
-				herdr: herdrContext,
-				zellij: zellijContext,
-			})));
-	const envVars = {
-		...launch.envVars,
-		...(zellijTarget ? { ZELLIJ_SESSION_NAME: zellijTarget.sessionName } : {}),
-		...(ordinarySurface ? { PI_SUBAGENT_SURFACE: ordinarySurface } : {}),
-		// The child receives the parent's clock, not its own: pane startup time
-		// belongs to the same deadline the watcher enforces.
-		...(prepared.agentDefs?.timeout || prepared.agentDefs?.idleTimeout
-			? { [PI_SUBAGENT_TIMEOUT_STARTED_AT]: String(startTime) }
-			: {}),
-	};
-
-	const taskArg = `@${writeTaskArtifact(params.name, fullTask, ctx)}`;
-	const promptArgs = buildPiPromptArgs(getPreparedSkillList(prepared), taskArg, directTask);
-	traceSubagentLaunch("interactive.promptArgs", {
-		id,
-		name: params.name,
-		directTask,
-		taskArg,
-		promptArgs,
-	});
-	piArgs.push(...promptArgs);
-
-	const { launchEntryCount } = launch;
-	clearSubagentExitSidecar(prepared.subagentSessionFile);
-	const { command, capsulePath, dispose } = buildInteractiveShellCommand({
-		cwd: launch.forcedCwd ?? prepared.runtimePaths.effectiveCwd ?? undefined,
-		piArgs,
-		envOverrides: envVars,
-		denyEnv: prepared.agentDefs?.denyEnv,
-		doneSentinelFile,
-		...(zellijTarget ? { deriveZellijPaneSurface: true } : {}),
-	});
-	let surface: string;
+	const evidence = createSubagentEvidence({ cwd: launch.forcedCwd ?? prepared.runtimePaths.effectiveCwd ?? ctx.cwd, sessionFile: prepared.subagentSessionFile, id, name: params.name, agent: params.agent, task: params.task });
 	try {
-		surface =
-			ordinarySurface ??
-			(await createZellijCommandSurface(surfaceName, zellijTarget!, getZellijShellCommand(command), zellijContext));
-		traceSubagentLaunch("interactive.surface", {
+		traceSubagentLaunch("interactive.prepared", {
 			id,
 			name: params.name,
-			surface,
-			surfacePreCreated,
-		});
-		if (!surfacePreCreated && !zellijTarget) {
-			await new Promise<void>((resolve) => setTimeout(resolve, runtime.getShellReadyDelayMs()));
-		}
-		traceSubagentLaunch("interactive.send", {
-			id,
-			name: params.name,
-			surface,
+			agent: params.agent,
+			sessionMode,
 			sessionFile: prepared.subagentSessionFile,
-			doneSentinelFile,
-			piArgs,
-			capsulePath,
-			envKeys: Object.keys(envVars).sort(),
+			cwd: prepared.runtimePaths.effectiveCwd,
+			model: prepared.effectiveModelRef,
+			skills: prepared.effectiveSkills,
+			injectSkills: prepared.effectiveInjectSkills,
 		});
-		if (!zellijTarget) sendShellCommand(surface, command);
+		const surfacePreCreated = !!options?.surface;
+		const surfaceName = prepared.sessionTitle ?? params.name;
+		const herdrContext = {
+			policy: launch.launchMetadata.herdrPlacementPolicy,
+		};
+		const parentPaneId = Number(process.env.ZELLIJ_PANE_ID);
+		const zellijContext =
+			launch.launchMetadata.zellijPlacementGroupKey && Number.isInteger(parentPaneId)
+				? {
+						groupKey: launch.launchMetadata.zellijPlacementGroupKey,
+						parentPaneId,
+						policy: launch.launchMetadata.zellijPlacementPolicy,
+					}
+				: undefined;
+		const doneSentinelFile = getDoneSentinelFile(prepared.subagentSessionFile, id);
+		const modeHint = prepared.agentDefs?.autoExit
+			? "Complete your task autonomously."
+			: "Manual lifecycle: the operator must close this foreground pane when done. Stay in this pane and wait for the operator to interact with you. Do not exit on your own. The operator can interact with you at any time.";
+		const summaryInstruction = prepared.agentDefs?.autoExit
+			? "Your FINAL assistant message should summarize what you accomplished."
+			: "After writing your response, stay in this pane for operator interaction. Do not exit. The operator will close the pane when finished.";
+		const agentType = params.agent ?? params.name;
+		const tabTitleInstruction =
+			!isSetTabTitleToolEnabled() || prepared.denySet.has(SET_TAB_TITLE_TOOL_NAME)
+				? ""
+				: `As your FIRST action, set the tab title using set_tab_title. ` +
+					`The title MUST start with [${agentType}] followed by a short description of your current task. ` +
+					`Example: "[${agentType}] Analyzing auth module". Keep it concise.`;
+		const roleBlock = getPreparedRoleBlock(prepared);
+		const expandedTask = await expandSubagentTask(params.task, {
+			enabled: prepared.agentDefs?.taskExpansion === "shell",
+			cwd: prepared.runtimePaths.effectiveCwd ?? ctx.cwd,
+		});
+		let fullTask = directTask
+			? expandedTask
+			: `${roleBlock}\n\n${modeHint}\n\n${tabTitleInstruction}\n\n${expandedTask}\n\n${summaryInstruction}`;
+		const skillInjection = getPreparedSkillInjection(prepared);
+		if (skillInjection) fullTask = `${skillInjection}\n\n${fullTask}`;
+
+		const piArgs = getPreparedSessionLaunchArgs(prepared);
+		const subagentDonePath = join(dirname(dirname(fileURLToPath(import.meta.url))), "tools", "subagent-done.ts");
+		for (const arg of getPreparedExtensionLaunchArgs(prepared, subagentDonePath)) {
+			piArgs.push(arg);
+		}
+
+		piArgs.push(...getPreparedModelArgs(prepared));
+		if (resolveSubagentNoContextFiles(prepared.agentDefs)) {
+			piArgs.push("--no-context-files");
+		}
+
+		const appendSystemPlan = buildAppendSystemInheritancePlan({
+			inheritAppendSystem: launch.launchMetadata.inheritAppendSystem === true,
+			systemPromptMode: launch.launchMetadata.systemPromptMode,
+			systemPrompt: launch.launchMetadata.systemPrompt,
+			boundarySystemPrompt: launch.boundarySystemPrompt ? CHILD_CONTEXT_BOUNDARY_SYSTEM_PROMPT : undefined,
+		});
+		for (let i = 0; i < appendSystemPlan.promptArgs.length; i += 2) {
+			const flag = appendSystemPlan.promptArgs[i];
+			const text = appendSystemPlan.promptArgs[i + 1] ?? "";
+			const value = flag === "--system-prompt" ? writeSystemPromptArtifact(params.name, text, ctx) : text;
+			piArgs.push(flag, value);
+		}
+		for (const arg of getApprovalLaunchArgs(prepared.agentDefs, "interactive")) {
+			piArgs.push(arg);
+		}
+		for (const arg of getSubagentToolLaunchArgs(
+			prepared.effectiveTools,
+			prepared.denySet,
+			isPreparedChildSpawningAllowed(prepared),
+		)) {
+			piArgs.push(arg);
+		}
+		for (const arg of getPreparedSkillLaunchArgs(prepared)) {
+			piArgs.push(arg);
+		}
+		for (const flag of getFlagsLaunchArgs(prepared.agentDefs?.flags)) {
+			piArgs.push(flag);
+		}
+
+		const startTime = Date.now();
+		const zellijTarget = !surfacePreCreated && getMuxBackend() === "zellij" ? await resolveZellijTarget() : undefined;
+		const ordinarySurface = zellijTarget
+			? undefined
+			: (options?.surface ??
+				(await createSurface(surfaceName, {
+					herdr: herdrContext,
+					zellij: zellijContext,
+				})));
+		const envVars = {
+			...launch.envVars,
+			...getSubagentEvidenceEnv(evidence),
+			...(zellijTarget ? { ZELLIJ_SESSION_NAME: zellijTarget.sessionName } : {}),
+			...(ordinarySurface ? { PI_SUBAGENT_SURFACE: ordinarySurface } : {}),
+			// The child receives the parent's clock, not its own: pane startup time
+			// belongs to the same deadline the watcher enforces.
+			...(prepared.agentDefs?.timeout || prepared.agentDefs?.idleTimeout
+				? { [PI_SUBAGENT_TIMEOUT_STARTED_AT]: String(startTime) }
+				: {}),
+		};
+
+		const taskArg = `@${writeTaskArtifact(params.name, fullTask, ctx)}`;
+		const promptArgs = buildPiPromptArgs(getPreparedSkillList(prepared), taskArg, directTask);
+		traceSubagentLaunch("interactive.promptArgs", {
+			id,
+			name: params.name,
+			directTask,
+			taskArg,
+			promptArgs,
+		});
+		piArgs.push(...promptArgs);
+
+		const { launchEntryCount } = launch;
+		clearSubagentExitSidecar(prepared.subagentSessionFile);
+		const { command, capsulePath, dispose } = buildInteractiveShellCommand({
+			cwd: launch.forcedCwd ?? prepared.runtimePaths.effectiveCwd ?? undefined,
+			piArgs,
+			envOverrides: envVars,
+			denyEnv: prepared.agentDefs?.denyEnv,
+			doneSentinelFile,
+			...(zellijTarget ? { deriveZellijPaneSurface: true } : {}),
+		});
+		let surface: string;
+		try {
+			surface =
+				ordinarySurface ??
+				(await createZellijCommandSurface(surfaceName, zellijTarget!, getZellijShellCommand(command), zellijContext));
+			traceSubagentLaunch("interactive.surface", {
+				id,
+				name: params.name,
+				surface,
+				surfacePreCreated,
+			});
+			if (!surfacePreCreated && !zellijTarget) {
+				await new Promise<void>((resolve) => setTimeout(resolve, runtime.getShellReadyDelayMs()));
+			}
+			traceSubagentLaunch("interactive.send", {
+				id,
+				name: params.name,
+				surface,
+				sessionFile: prepared.subagentSessionFile,
+				doneSentinelFile,
+				piArgs,
+				capsulePath,
+				envKeys: Object.keys(envVars).sort(),
+			});
+			if (!zellijTarget) sendShellCommand(surface, command);
+		} catch (error) {
+			// The pane never received the command, so nothing will consume the
+			// capsule. Delete it rather than leaving credentials on disk.
+			dispose();
+			throw error;
+		}
+		return {
+			evidence,
+			id,
+			name: params.name,
+			task: params.task,
+			title: getSubagentDisplayTitle(params),
+			agent: params.agent,
+			mode: "interactive",
+			executionState: "running",
+			deliveryState: "detached",
+			parentClosePolicy: resolveSubagentParentClosePolicy(prepared.agentDefs),
+			blocking: params.blocking ?? false,
+			async: params.async ?? !(params.blocking ?? false),
+			autoExit: prepared.agentDefs?.autoExit ?? false,
+			noSession,
+			reportContextUsage: resolveSubagentReportContextUsage(prepared.agentDefs),
+			...resolveSubagentTimeoutState(prepared.agentDefs),
+			surface,
+			startTime,
+			sessionFile: prepared.subagentSessionFile,
+			launchEntryCount,
+			modelContextWindow: runtime.getContextWindow(prepared.effectiveModel),
+			modelRef: prepared.effectiveModelRef,
+			launchMetadata: launch.launchMetadata,
+			doneSentinelFile,
+			zellijTarget,
+		};
 	} catch (error) {
-		// The pane never received the command, so nothing will consume the
-		// capsule. Delete it rather than leaving credentials on disk.
-		dispose();
-		throw error;
+		recordSubagentOutcome(evidence, { status: "failed", id, name: params.name, agent: params.agent, task: params.task, sessionFile: noSession ? undefined : prepared.subagentSessionFile, error: String(error) });
+		throw new Error(`${error instanceof Error ? error.message : String(error)}${formatSubagentEvidence(evidence)}`, { cause: error });
 	}
-	return {
-		id,
-		name: params.name,
-		task: params.task,
-		title: getSubagentDisplayTitle(params),
-		agent: params.agent,
-		mode: "interactive",
-		executionState: "running",
-		deliveryState: "detached",
-		parentClosePolicy: resolveSubagentParentClosePolicy(prepared.agentDefs),
-		blocking: params.blocking ?? false,
-		async: params.async ?? !(params.blocking ?? false),
-		autoExit: prepared.agentDefs?.autoExit ?? false,
-		noSession,
-		reportContextUsage: resolveSubagentReportContextUsage(prepared.agentDefs),
-		...resolveSubagentTimeoutState(prepared.agentDefs),
-		surface,
-		startTime,
-		sessionFile: prepared.subagentSessionFile,
-		launchEntryCount,
-		modelContextWindow: runtime.getContextWindow(prepared.effectiveModel),
-		modelRef: prepared.effectiveModelRef,
-		launchMetadata: launch.launchMetadata,
-		doneSentinelFile,
-		zellijTarget,
-	};
 }

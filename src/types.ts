@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import type { SubagentEvidence } from "./runtime/activity-evidence.ts";
 import type { PersistedSubagentLaunchMetadata } from "./session/session-files.ts";
 
 export type DeliveryState = "detached" | "awaited";
@@ -100,6 +101,7 @@ export interface SubagentResult {
 }
 
 export interface CompletedSubagentResult extends SubagentResult {
+	evidence?: SubagentEvidence;
 	id: string;
 	agent?: string;
 	mode: "interactive" | "background";
@@ -115,6 +117,9 @@ export interface CompletedSubagentResult extends SubagentResult {
 }
 
 export interface RunningSubagent {
+	evidence?: SubagentEvidence;
+	/** Parent closed while this child was intentionally left running. */
+	evidenceDetached?: boolean;
 	id: string;
 	name: string;
 	task: string;

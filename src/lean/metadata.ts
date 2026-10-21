@@ -33,12 +33,12 @@ const AFTER_LAUNCH_RULES = new Map([
 		"- Ask only if the next step's ownership is unclear.",
 	],
 	[
-		"Results arrive automatically as a steer message that starts a new turn. Do not poll, sleep-read, or check session files — the harness handles delivery.",
-		"Results arrive automatically by steer and trigger a turn; do not poll or inspect session files.",
+		"Results arrive automatically as a steer message that starts a new turn. Read the returned activity and run-evidence files on demand for progress or failure diagnosis; do not repeatedly poll for completion.",
+		"Results arrive automatically by steer; inspect returned evidence on demand, without polling for completion.",
 	],
 	[
-		"Results arrive automatically as a follow-up message that starts a new turn. Do not poll, sleep-read, or check session files — the harness handles delivery.",
-		"Results arrive automatically by follow-up and trigger a turn; do not poll or inspect session files.",
+		"Results arrive automatically as a follow-up message that starts a new turn. Read the returned activity and run-evidence files on demand for progress or failure diagnosis; do not repeatedly poll for completion.",
+		"Results arrive automatically by follow-up; inspect returned evidence on demand, without polling for completion.",
 	],
 	[
 		"You may continue with non-overlapping work after launching a tool_return=later_message helper. Do not redo delegated work or claim results before the later report appears.",

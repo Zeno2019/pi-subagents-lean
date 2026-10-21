@@ -1,3 +1,4 @@
+import { getSubagentEvidenceEnv } from "./activity-evidence.ts";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -139,6 +140,7 @@ async function getWrapUpLaunchParts(running: RunningSubagent, signal?: AbortSign
 	env.PI_SUBAGENT_SPAWN_WIDTH_EFFECTIVE = "";
 	env.PI_PACKAGE_DIR = "";
 	env.PI_ARTIFACT_PROJECT_ROOT = getArtifactStorageRoot();
+	Object.assign(env, getSubagentEvidenceEnv(running.evidence));
 	return {
 		args: [...extensionArgs, ...parityArgs],
 		env,
