@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
+import { splitModelRef } from "../agents/model-refs.ts";
 import { getSubagentActivityStartIndex } from "../session/session-files.ts";
 import { readVerifiedRunDisplay, type VerifiedCandidateDisplay } from "../vf/widget.ts";
 import type {
@@ -118,7 +119,7 @@ export class SubagentWidgetManager {
 			modelId = rest.join("/");
 		}
 		if (!provider) return undefined;
-		const candidates = [modelId, modelId.replace(/:[^:]+$/, "")].filter(Boolean);
+		const candidates = [modelId, splitModelRef(modelId).model].filter(Boolean);
 		const model = [...new Set(candidates)]
 			.map((candidate) => this.latestCtx?.modelRegistry.find(provider!, candidate))
 			.find(Boolean);
@@ -227,7 +228,7 @@ export class SubagentWidgetManager {
 
 		let contextWindow = fallbackContextWindow ?? 0;
 		if (!contextWindow && this.latestCtx?.modelRegistry?.find && resolvedProvider) {
-			const candidates = [resolvedModelId, resolvedModelId.replace(/:[^:]+$/, "")].filter(Boolean);
+			const candidates = [resolvedModelId, splitModelRef(resolvedModelId).model].filter(Boolean);
 			const model = [...new Set(candidates)]
 				.map((candidate) => this.latestCtx?.modelRegistry.find(resolvedProvider!, candidate))
 				.find(Boolean);

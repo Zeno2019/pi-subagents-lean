@@ -14,6 +14,14 @@
 
 `src/lean.ts` wraps upstream registration. `src/lean/metadata.ts` changes only known tool descriptions, schema descriptions, prompt snippets and roster prose. It retains schema fields and constraints, Typebox symbols, handlers, tool names and agent entries. Unknown roster rules pass through unchanged so a future upstream rule is not silently deleted. Upstream lifecycle instructions remain the source for mode-specific prompt text.
 
+`src/agents/model-refs.ts` preserves exact model identities, including colon tags.
+An exact registered ID wins over thinking-suffix syntax; only a final Pi thinking
+level may be split otherwise. Launch and resume keep resolved identity and
+thinking separate through allowlist checks, persisted metadata and child argv.
+The roster displays the default model and thinking separately, alongside explicit
+allowed overrides. Do not copy Pi's fuzzy matching or invalid-suffix fallback into
+these exact model and allowlist paths.
+
 `test/runtime/rpc-async.test.ts` locks the runtime policy. `test/lean/metadata.test.ts` locks the wrapper contract. `test/rpc/` runs real SDK RPC with local synthetic processes, without credentials or model requests. The small orchestrator fixture change supplies the normalized system-prompt fields expected by the development SDK.
 
 Do not merge management tool names without reviewing spawning grants, denied tools, orchestrator allowlists, mixed-batch classification and historical session calls. Do not hide model choices or edit user Markdown presets as a prompt optimization.

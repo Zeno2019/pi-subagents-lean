@@ -41,7 +41,9 @@ describe("resume model launch configuration", () => {
 
 		assert.deepEqual(await getPersistedSessionParityArgsForTest(overridden), [
 			"--model",
-			"provider/requested:high",
+			"provider/requested",
+			"--thinking",
+			"high",
 			"--no-approve",
 		]);
 	});
@@ -254,7 +256,9 @@ describe("resume model launch configuration", () => {
 		assert.equal(overridden?.requestedThinkingOverride, "off");
 		assert.deepEqual(await getPersistedSessionParityArgsForTest(overridden), [
 			"--model",
-			"zai-messages/glm-5-turbo:off",
+			"zai-messages/glm-5-turbo",
+			"--thinking",
+			"off",
 			"--no-approve",
 		]);
 	});

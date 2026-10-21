@@ -225,7 +225,7 @@ export default function subagentsExtension(pi: ExtensionAPI) {
 		const signature = getAgentListSignature(entries);
 		// A headless parent awaits every launch, so the roster must not promise
 		// a later report the model would otherwise plan around.
-		const rosterOptions = { awaitAllLaunches: isHeadlessLaunchSession(ctx.hasUI) };
+		const rosterOptions = { awaitAllLaunches: isHeadlessLaunchSession(ctx.hasUI), modelRegistry: ctx.modelRegistry };
 		if (entries.length === 0) {
 			const hasDescribedAgents = getEffectiveAgentDefinitions(ctx.cwd).some((agent) => agent.description?.trim());
 			if (!hasDescribedAgents && lastAmbientRosterSignature === null) {

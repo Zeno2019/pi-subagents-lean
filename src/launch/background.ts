@@ -22,7 +22,7 @@ import {
 	getApprovalLaunchArgs,
 	getFlagsLaunchArgs,
 	getPreparedExtensionLaunchArgs,
-	getPreparedModel,
+	getPreparedModelArgs,
 	getPreparedRoleBlock,
 	getPreparedSessionLaunchArgs,
 	getPreparedSkillInjection,
@@ -91,8 +91,7 @@ export async function buildBackgroundLaunchPlan(
 		...getPreparedSessionLaunchArgs(prepared),
 		...getPreparedExtensionLaunchArgs(prepared, subagentDonePath),
 	];
-	const model = getPreparedModel(prepared);
-	if (model) args.push("--model", model);
+	args.push(...getPreparedModelArgs(prepared));
 	if (resolveSubagentNoContextFiles(prepared.agentDefs)) args.push("--no-context-files");
 
 	const appendSystemPlan = buildAppendSystemInheritancePlan({
@@ -176,7 +175,7 @@ export async function launchBackgroundSubagent(
 		startTime,
 		sessionFile: prepared.subagentSessionFile,
 		launchEntryCount,
-		modelContextWindow: runtime.getContextWindow(prepared.effectiveModelRef),
+		modelContextWindow: runtime.getContextWindow(prepared.effectiveModel),
 		modelRef: prepared.effectiveModelRef,
 		launchMetadata: launch.launchMetadata,
 	};

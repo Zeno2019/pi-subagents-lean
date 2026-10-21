@@ -521,7 +521,7 @@ describe("Herdr interactive launch parity", () => {
 			{
 				getContextWindow: (modelRef) => {
 					contextWindowRefs.push(modelRef);
-					return modelRef === "zai-messages/glm-5-turbo:off" ? 8192 : undefined;
+					return modelRef === "zai-messages/glm-5-turbo" ? 8192 : undefined;
 				},
 				getShellReadyDelayMs: () => 0,
 			},
@@ -535,7 +535,7 @@ describe("Herdr interactive launch parity", () => {
 		assert.equal(running.parentClosePolicy, "continue");
 		assert.equal(running.modelRef, "zai-messages/glm-5-turbo:off");
 		assert.equal(running.modelContextWindow, 8192);
-		assert.deepEqual(contextWindowRefs, ["zai-messages/glm-5-turbo:off"]);
+		assert.deepEqual(contextWindowRefs, ["zai-messages/glm-5-turbo"]);
 
 		const metadata = readSubagentLaunchMetadataForTest(running.sessionFile);
 		assert.equal(metadata?.mode, "interactive");
@@ -569,7 +569,8 @@ describe("Herdr interactive launch parity", () => {
 		assert.equal(capsule.overrides.PI_SUBAGENT_EXTENSIONS, "");
 		const modelIndex = capsule.args.indexOf("--model");
 		assert.notEqual(modelIndex, -1);
-		assert.equal(capsule.args[modelIndex + 1], "zai-messages/glm-5-turbo:off");
+		assert.equal(capsule.args[modelIndex + 1], "zai-messages/glm-5-turbo");
+		assert.equal(capsule.args[capsule.args.indexOf("--thinking") + 1], "off");
 		assert.ok(capsule.args.includes("--no-context-files"));
 		const appendIndex = capsule.args.indexOf("--append-system-prompt");
 		assert.notEqual(appendIndex, -1);

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAgentDefaults as loadAgentDefaultsFromDefinitions } from "../agents/definitions.ts";
-import { assertModelAllowed, buildModelRef, splitModelRef } from "../agents/model-refs.ts";
+import { assertModelAllowed, splitModelRef, type ResolvedModelRef } from "../agents/model-refs.ts";
 import { getArtifactStorageRoot } from "../artifact-storage.ts";
 import { buildAppendSystemInheritancePlan } from "../launch/append-system.ts";
 import { getPiInvocation, getSubagentChildProcessEnv } from "../launch/child-command.ts";
@@ -106,8 +106,9 @@ export interface ResumeSessionInput {
 function splitResumeModelRef(
 	model: string,
 	fallbackThinking: string | undefined,
+	modelRegistry?: ResumeServiceRuntime["modelRegistry"],
 ): { model: string; thinking: string | undefined; explicitThinking: boolean } {
-	const split = splitModelRef(model);
+	const split = splitModelRef(model, modelRegistry);
 	return split.thinking === undefined
 		? { model, thinking: fallbackThinking, explicitThinking: false }
 		: { model: split.model, thinking: split.thinking, explicitThinking: true };
@@ -147,11 +148,13 @@ export function resolveResumeLaunchMetadataForInvocation(
 			...(requestedThinking ? { ignoredThinkingOverride: requestedThinking } : {}),
 		};
 	}
-	const baseModel = requestedModel ?? launchMetadata.modelRef ?? launchMetadata.model;
+	const baseModel = requestedModel ?? launchMetadata.model ?? launchMetadata.modelRef;
 	if (!baseModel) {
 		throw new Error("Cannot apply thinking override without a persisted model.");
 	}
-	const requested = splitResumeModelRef(baseModel, requestedThinking ?? launchMetadata.thinking);
+	const requested = !requestedModel && launchMetadata.model
+		? { model: launchMetadata.model, thinking: requestedThinking ?? launchMetadata.thinking, explicitThinking: requestedThinking != null }
+		: splitResumeModelRef(baseModel, requestedThinking ?? launchMetadata.thinking, modelRegistry);
 	const explicitThinking = requested.explicitThinking || requestedThinking != null;
 	const resolved = resolveAvailableModelRef(
 		requested.model,
@@ -161,13 +164,15 @@ export function resolveResumeLaunchMetadataForInvocation(
 		launchMetadata.modelRef,
 	);
 	const { effectiveModel, effectiveThinking, effectiveModelRef } = normalizeModelRef(resolved.model, resolved.thinking);
-	const implicitDefaultRef = buildModelRef(launchMetadata.definitionModel, launchMetadata.definitionThinking);
-	const implicitAllowed = implicitDefaultRef
-		? [implicitDefaultRef]
+	const implicitDefault = launchMetadata.definitionModel
+		? splitResumeModelRef(launchMetadata.definitionModel, launchMetadata.definitionThinking, modelRegistry)
+		: undefined;
+	const implicitAllowed: Array<string | ResolvedModelRef> = implicitDefault
+		? [implicitDefault]
 		: launchMetadata.modelSource === "parent" && launchMetadata.modelRef
-			? [launchMetadata.modelRef]
+			? [launchMetadata.model ? { model: launchMetadata.model, thinking: launchMetadata.thinking } : launchMetadata.modelRef]
 			: [];
-	assertModelAllowed(effectiveModelRef, launchMetadata.allowedModels, launchMetadata.name, implicitAllowed);
+	assertModelAllowed(effectiveModel ? { model: effectiveModel, thinking: effectiveThinking } : undefined, launchMetadata.allowedModels, launchMetadata.name, implicitAllowed, modelRegistry);
 	return {
 		...launchMetadata,
 		timestamp: new Date().toISOString(),
@@ -457,7 +462,7 @@ async function resumeSubagentSessionWithoutWidth(
 		startTime: resumeStartTime,
 		sessionFile,
 		launchEntryCount: entryCountBefore,
-		modelContextWindow: runtime.getContextWindow(invocationMetadata?.modelRef),
+		modelContextWindow: runtime.getContextWindow(invocationMetadata?.model ?? invocationMetadata?.modelRef),
 		modelRef: invocationMetadata?.modelRef,
 		launchMetadata: resumedInvocationMetadata,
 	};

@@ -348,10 +348,10 @@ describe("agent definitions and catalog", () => {
 
 		const entries = getAgentListEntriesForTest(dir);
 		const reminder = renderAgentListReminderForTest(entries);
-		assert.match(reminder, /default_model: zai-messages\/glm-5\.1:high/);
-		assert.match(reminder, /models: zai-messages\/glm-5\.1:high \| openai-ws\/gpt-5\.5:low \| nahcrof\/glm-5\.1:off/);
+		assert.match(reminder, /default_model: zai-messages\/glm-5\.1\n  default_thinking: high/);
+		assert.match(reminder, /models: openai-ws\/gpt-5\.5:low \| nahcrof\/glm-5\.1:off/);
 		assert.match(reminder, /- `scout`: Inspect files\n(?: {2}.+\n){4,5} {2}models: any model ref/);
-		assert.match(reminder, /`models:` lists accepted overrides/);
+		assert.match(reminder, /`models:` lists additional accepted overrides/);
 
 		const firstSignature = getAgentListSignatureForTest(entries);
 		writeFileSync(
@@ -374,7 +374,7 @@ describe("agent definitions and catalog", () => {
 		);
 
 		const reminder = renderAgentListReminderForTest(getAgentListEntriesForTest(dir));
-		assert.match(reminder, /default_model: openai-cpa\/gpt-5\.6-sol:max/);
+		assert.match(reminder, /default_model: openai-cpa\/gpt-5\.6-sol\n  default_thinking: max/);
 		assert.match(reminder, /models: any model ref/);
 		assert.match(reminder, /`models: any model ref` accepts any available model/);
 	});

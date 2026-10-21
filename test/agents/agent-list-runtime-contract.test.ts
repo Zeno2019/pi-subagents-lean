@@ -72,7 +72,7 @@ describe("agent-list runtime contract", () => {
 		withAgentRoot(agentsDir, () => {
 			const reminder = renderAgentListReminderForTest(getAgentListEntriesForTest(baseCwd));
 			assert.match(reminder, /models: any model ref/);
-			assert.match(reminder, /`models:` lists accepted overrides/);
+			assert.match(reminder, /`models:` lists additional accepted overrides/);
 		});
 	});
 
@@ -83,7 +83,7 @@ describe("agent-list runtime contract", () => {
 		withAgentRoot(agentsDir, () => {
 			const reminder = renderAgentListReminderForTest(getAgentListEntriesForTest(baseCwd));
 			assert.match(reminder, /default_model: provider\/model/);
-			assert.match(reminder, /`models:` lists accepted overrides/);
+			assert.match(reminder, /`models:` lists additional accepted overrides/);
 			assert.doesNotMatch(blockFor(reminder, "pinned-model"), /\n {2}models:/);
 		});
 	});

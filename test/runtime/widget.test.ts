@@ -11,6 +11,19 @@ function stripAnsi(text: string): string {
 	return text.replace(new RegExp("\\x1b\\[[0-9;]*m", "g"), "");
 }
 
+describe("model context window identity", () => {
+	it("preserves exact tagged ids and never falls back from an unknown tag", () => {
+		const widget = new SubagentWidgetManager(() => []);
+		const windows: Record<string, number> = { engine: 100, "engine:1017": 200, "engine:high": 300 };
+		widget.attachContext({ hasUI: false, modelRegistry: {
+			find: (provider: string, id: string) => provider === "synthetic" && windows[id] ? { contextWindow: windows[id] } : undefined,
+		} } as unknown as Parameters<typeof widget.attachContext>[0]);
+		assert.equal(widget.resolveModelContextWindow("synthetic/engine:1017:low"), 200);
+		assert.equal(widget.resolveModelContextWindow("synthetic/engine:high"), 300);
+		assert.equal(widget.resolveModelContextWindow("synthetic/engine:unknown"), undefined);
+	});
+});
+
 function makeRunningSubagent(index: number): RunningSubagent {
 	return {
 		id: `child-${index}`,

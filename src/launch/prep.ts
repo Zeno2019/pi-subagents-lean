@@ -174,11 +174,13 @@ export async function prepareSubagentLaunch(
 	};
 }
 
-export function getPreparedModel(prepared: PreparedSubagentLaunch): string | undefined {
-	if (!prepared.effectiveModel) return undefined;
-	return prepared.effectiveThinking
-		? `${prepared.effectiveModel}:${prepared.effectiveThinking}`
-		: prepared.effectiveModel;
+function getModelLaunchArgs(model: string | undefined, thinking: string | undefined): string[] {
+	if (!model) return [];
+	return ["--model", model, ...(thinking ? ["--thinking", thinking] : [])];
+}
+
+export function getPreparedModelArgs(prepared: Pick<PreparedSubagentLaunch, "effectiveModel" | "effectiveThinking">): string[] {
+	return getModelLaunchArgs(prepared.effectiveModel, prepared.effectiveThinking);
 }
 
 /**
@@ -301,7 +303,7 @@ export async function getPersistedSessionParityArgs(
 ): Promise<string[]> {
 	const args: string[] = [];
 	if (!metadata) return args;
-	if (metadata.modelRef) args.push("--model", metadata.modelRef);
+	args.push(...getModelLaunchArgs(metadata.model ?? metadata.modelRef, metadata.model ? metadata.thinking : undefined));
 	if (metadata.noContextFiles) args.push("--no-context-files");
 	args.push(...getSubagentToolLaunchArgs(metadata.tools, new Set(metadata.denyTools), spawningAllowed));
 	args.push(

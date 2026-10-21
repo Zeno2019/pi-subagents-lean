@@ -1,6 +1,6 @@
 import type { ResolvedAgentDefinition } from "./definitions.ts";
 import { getEffectiveAgentDefinitions } from "./definitions.ts";
-import { buildModelRef, parseAllowedModels } from "./model-refs.ts";
+import { buildModelRef, splitModelRef, parseAllowedModels, type ModelRefRegistry } from "./model-refs.ts";
 import { formatTimeoutSeconds } from "../runtime/timeout-budget.ts";
 import { resolveVerifierCandidateCount } from "../vf/criteria.ts";
 import {
@@ -92,6 +92,7 @@ export function getAgentListEntries(
 
 /** Controls how launch timing is described in the agent roster. */
 export interface AgentListRenderOptions {
+	modelRegistry?: ModelRefRegistry;
 	/**
 	 * The session awaits every launch (headless parent), so no helper reports
 	 * later regardless of its own `async` setting.
@@ -122,17 +123,18 @@ function getCompletion(entry: AgentListEntry): "exits_automatically" | "human_or
 	return entry.mode === "background" ? "exits_automatically" : "human_or_agent_must_finish";
 }
 
-function renderDefaultModelLine(entry: AgentListEntry): string | undefined {
-	const ref = buildModelRef(entry.model, entry.thinking);
-	return ref ? `  default_model: ${ref}` : undefined;
+function renderDefaultModelLines(entry: AgentListEntry, registry?: ModelRefRegistry): string[] {
+	if (!entry.model?.trim()) return [];
+	const resolved = splitModelRef(entry.model.trim(), registry);
+	const thinking = resolved.thinking ?? entry.thinking?.trim();
+	return [`  default_model: ${resolved.model}`, ...(thinking ? [`  default_thinking: ${thinking}`] : [])];
 }
 
 function renderModelsLine(entry: AgentListEntry): string | undefined {
 	if (entry.allowModelOverride === false) return undefined;
 	const allowed = parseAllowedModels(entry.allowedModels);
 	if (allowed.length === 0) return "  models: any model ref";
-	const defaultModel = buildModelRef(entry.model, entry.thinking);
-	const choices = [...new Set([defaultModel, ...allowed].filter((ref): ref is string => !!ref))];
+	const choices = [...new Set(allowed)];
 	return `  models: ${choices.join(" | ")}`;
 }
 
@@ -207,14 +209,14 @@ function getAgentListReminderFlags(entries: AgentListEntry[]): AgentListReminder
 	};
 }
 
-function renderAgentListEntry(entry: AgentListEntry, awaitAllLaunches: boolean): string {
+function renderAgentListEntry(entry: AgentListEntry, awaitAllLaunches: boolean, registry?: ModelRefRegistry): string {
 	return [
 		`- \`${entry.name}\`: ${entry.description}`,
 		`  tool_return: ${getToolReturn(entry, awaitAllLaunches)}`,
 		`  runs_as: ${getRunsAs(entry)}`,
 		`  context: ${getContext(entry)}`,
 		`  completion: ${getCompletion(entry)}`,
-		renderDefaultModelLine(entry),
+		...renderDefaultModelLines(entry, registry),
 		renderModelsLine(entry),
 		...renderSpawningLines(entry),
 		renderVerifiedFanOutLine(entry),
@@ -224,9 +226,9 @@ function renderAgentListEntry(entry: AgentListEntry, awaitAllLaunches: boolean):
 		.join("\n");
 }
 
-function renderAgentListEntries(entries: AgentListEntry[], awaitAllLaunches: boolean): string[] {
+function renderAgentListEntries(entries: AgentListEntry[], awaitAllLaunches: boolean, registry?: ModelRefRegistry): string[] {
 	if (entries.length === 0) return ["No agents are spawnable in this session."];
-	return entries.map((entry) => renderAgentListEntry(entry, awaitAllLaunches));
+	return entries.map((entry) => renderAgentListEntry(entry, awaitAllLaunches, registry));
 }
 
 function renderToolReturnRules(awaitAllLaunches: boolean): string[] {
@@ -256,7 +258,7 @@ function renderAgentListRules(flags: AgentListReminderFlags, awaitAllLaunches: b
 		"- completion=exits_automatically means the helper should finish and close itself. completion=human_or_agent_must_finish means the session stays open until the human or helper explicitly completes it.",
 		...renderOptionalRule(
 			flags.hasModelInfo,
-			"- `default_model:` runs when model/thinking are omitted. `models:` lists accepted overrides; `models: any model ref` accepts any available model. An agent with no `models:` line ignores model and thinking overrides. For a listed ref, copy it exactly and split `provider/model:thinking` into model=`provider/model`, thinking=`thinking`. Never use an unlisted model when an explicit list is present.",
+			"- `default_model:` and `default_thinking:` run when model/thinking are omitted; this default combination is always allowed. `models:` lists additional accepted overrides; `models: any model ref` accepts any available model. An agent with no `models:` line ignores model and thinking overrides. Copy a listed ref intact into model; preserve model tags such as :latest and use thinking separately when needed. Never use an unlisted override when an explicit list is present.",
 		),
 		...renderOptionalRule(
 			flags.hasTimeLimits,
@@ -287,7 +289,7 @@ function renderAgentListRules(flags: AgentListReminderFlags, awaitAllLaunches: b
 export function renderAgentListReminder(entries: AgentListEntry[], options: AgentListRenderOptions = {}): string {
 	const awaitAllLaunches = options.awaitAllLaunches === true;
 	const flags = getAgentListReminderFlags(entries);
-	const agentLines = renderAgentListEntries(entries, awaitAllLaunches);
+	const agentLines = renderAgentListEntries(entries, awaitAllLaunches, options.modelRegistry);
 	const body = [
 		"You can launch separate helper agents with the subagent tool. Use this roster to choose exact agent names and to understand how each launched agent behaves.",
 		"<subagent-roster>",

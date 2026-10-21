@@ -351,7 +351,7 @@ describe("child launch plan", () => {
 						],
 					},
 				}),
-			/does not support thinking level 'ultra'.*Supported levels: off, minimal, low, medium, high, max/,
+			/Unknown model override 'zai-messages\/glm-5\.2:ultra'/,
 		);
 	});
 

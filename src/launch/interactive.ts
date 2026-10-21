@@ -24,7 +24,7 @@ import {
 	getApprovalLaunchArgs,
 	getFlagsLaunchArgs,
 	getPreparedExtensionLaunchArgs,
-	getPreparedModel,
+	getPreparedModelArgs,
 	getPreparedRoleBlock,
 	getPreparedSessionLaunchArgs,
 	getPreparedSkillInjection,
@@ -109,8 +109,7 @@ export async function launchInteractiveSubagent(
 		piArgs.push(arg);
 	}
 
-	const model = getPreparedModel(prepared);
-	if (model) piArgs.push("--model", model);
+	piArgs.push(...getPreparedModelArgs(prepared));
 	if (resolveSubagentNoContextFiles(prepared.agentDefs)) {
 		piArgs.push("--no-context-files");
 	}
@@ -236,7 +235,7 @@ export async function launchInteractiveSubagent(
 		startTime,
 		sessionFile: prepared.subagentSessionFile,
 		launchEntryCount,
-		modelContextWindow: runtime.getContextWindow(prepared.effectiveModelRef),
+		modelContextWindow: runtime.getContextWindow(prepared.effectiveModel),
 		modelRef: prepared.effectiveModelRef,
 		launchMetadata: launch.launchMetadata,
 		doneSentinelFile,

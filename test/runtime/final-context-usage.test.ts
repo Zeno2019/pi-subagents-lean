@@ -30,6 +30,22 @@ function makeRunning(sessionFile: string): RunningSubagent {
 }
 
 describe("final context usage", () => {
+	it("matches full tagged model identities before removing a thinking suffix", () => {
+		const dir = createTestDir();
+		try {
+			for (const model of ["engine:1017", "engine:high"]) {
+				const sessionFile = writeChildSession(dir, [{ type: "message", message: {
+					role: "assistant", provider: "synthetic", model, usage: { totalTokens: 42 },
+				} }]);
+				for (const modelRef of [`synthetic/${model}`, `synthetic/${model}:low`]) {
+					const usage = resolveFinalContextUsage({ ...makeRunning(sessionFile), modelRef }, undefined);
+					assert.equal(usage.contextTokens, 42);
+				}
+			}
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 	it("reports that the child was warned before it finished", () => {
 		const dir = createTestDir();
 		try {

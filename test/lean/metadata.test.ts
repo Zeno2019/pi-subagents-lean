@@ -217,6 +217,7 @@ describe("lean metadata contract", () => {
 						mode === "rpc" ? /follow-up/ : /steer/,
 					);
 				assert.match(lean.promptSnippet, /model.*thinking|model\/thinking/);
+				if (name === "subagent") assert.match(lean.promptSnippet, /refs intact, preserving tags/);
 			}
 		});
 	}
@@ -238,6 +239,7 @@ describe("lean metadata contract", () => {
 			assert.ok(lean.length < source.length);
 			assert.match(lean, /ignores model.*thinking|no.*models.*ignores/i);
 			assert.match(lean, /unlisted|listed models|explicit list/);
+			assert.match(lean, /refs intact into model, preserving tags/);
 		});
 	}
 

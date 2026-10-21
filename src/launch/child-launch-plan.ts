@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { AgentDefaults } from "../agents/definitions.ts";
-import { assertModelAllowed, splitModelRef } from "../agents/model-refs.ts";
+import { assertModelAllowed, splitModelRef, type ModelRefRegistry } from "../agents/model-refs.ts";
 import { buildSubagentSessionTitle } from "../agents/titles.ts";
 import { generateSubagentSessionFile, type ResumeMode } from "../session/session-files.ts";
 import { addToolModeDeniedNames, resolveDenyTools } from "../tools/policy.ts";
@@ -55,25 +55,23 @@ export interface ChildLaunchPlanOptions {
 export function splitModelRefThinking(
 	model: string | undefined,
 	fallbackThinking: string | undefined,
+	modelRegistry?: ModelRefRegistry,
 ): {
 	model: string | undefined;
 	thinking: string | undefined;
 	explicitThinking: boolean;
 } {
 	if (!model) return { model, thinking: fallbackThinking, explicitThinking: false };
-	const split = splitModelRef(model);
+	const split = splitModelRef(model, modelRegistry);
 	return split.thinking === undefined
 		? { model, thinking: fallbackThinking, explicitThinking: false }
 		: { model: split.model, thinking: split.thinking, explicitThinking: true };
 }
 
 /**
- * Normalize model and thinking into a safe model ref.
- *
- * Handles two edge cases:
- * 1. When the model string already carries a `:thinking` suffix and an
- *    explicit thinking level is also set, strip the embedded suffix.
- * 2. When no model is available at all, suppress both thinking and modelRef.
+ * Rebuild a ref from an already split model identity and thinking level.
+ * Do not parse the model again: its final colon segment belongs to the ID.
+ * Without a model, suppress both thinking and modelRef.
  */
 export function normalizeModelRef(
 	model: string | undefined,
@@ -90,11 +88,9 @@ export function normalizeModelRef(
 			effectiveModelRef: undefined,
 		};
 	}
-	let baseModel = model;
-	if (thinking) baseModel = splitModelRef(model).model;
-	const ref = thinking ? `${baseModel}:${thinking}` : baseModel;
+	const ref = thinking ? `${model}:${thinking}` : model;
 	return {
-		effectiveModel: baseModel,
+		effectiveModel: model,
 		effectiveThinking: thinking,
 		effectiveModelRef: ref,
 	};
@@ -169,7 +165,7 @@ export async function buildChildLaunchPlan(options: ChildLaunchPlanOptions): Pro
 		effectiveThinking?: string;
 		effectiveModelRef?: string;
 	} => {
-		const split = splitModelRefThinking(model, fallbackThinking);
+		const split = splitModelRefThinking(model, fallbackThinking, options.modelRegistry);
 		const explicit = split.explicitThinking || opts.explicitThinking;
 		// Resolve a bare id (no provider) through the registry only when this is a
 		// launch override or when this agent opts into allowed-models; otherwise
@@ -192,16 +188,17 @@ export async function buildChildLaunchPlan(options: ChildLaunchPlanOptions): Pro
 		},
 	);
 	if (hasAllowedModels) {
-		const defaultModelRef = resolveRef(
+		const defaultModel = resolveRef(
 			agentDefs?.model ?? options.parentModelRef,
 			agentDefs?.thinking ?? options.parentThinking,
 			{ resolveAlways: false, explicitThinking: false },
-		).effectiveModelRef;
+		);
 		assertModelAllowed(
-			effectiveModelRef,
+			effectiveModel ? { model: effectiveModel, thinking: effectiveThinking } : undefined,
 			agentDefs?.allowedModels,
 			params.agent,
-			defaultModelRef ? [defaultModelRef] : [],
+			defaultModel.effectiveModel ? [{ model: defaultModel.effectiveModel, thinking: defaultModel.effectiveThinking }] : [],
+			options.modelRegistry,
 		);
 	}
 

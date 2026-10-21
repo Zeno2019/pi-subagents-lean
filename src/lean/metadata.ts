@@ -74,7 +74,7 @@ function toolSnippet(name: string): string {
 		"Use an exact roster agent with name/title/task; batch parallel tasks in children, each requested agent once. " +
 		"name: lower-kebab scope-role, 2–4 words, ≤32 chars; title: sentence case, 3–8 words, task-focused. " +
 		"Give fresh-context helpers a self-contained brief (goal/files/constraints/output); keep parallel scopes separate. " +
-		"Split provider/model:thinking into model=provider/model and thinking=thinking. " +
+		"Copy model refs intact, preserving tags such as :latest; use thinking separately when needed. " +
 		routing +
 		compactAfterLaunchPrompt()
 	);
@@ -180,8 +180,8 @@ const ROSTER_RULES = new Map([
 		"- exits_automatically: closes itself; human_or_agent_must_finish: stays open until explicitly finished.",
 	],
 	[
-		"- `default_model:` runs when model/thinking are omitted. `models:` lists accepted overrides; `models: any model ref` accepts any available model. An agent with no `models:` line ignores model and thinking overrides. For a listed ref, copy it exactly and split `provider/model:thinking` into model=`provider/model`, thinking=`thinking`. Never use an unlisted model when an explicit list is present.",
-		"- default_model applies when model/thinking are omitted. models lists accepted overrides; 'any model ref' allows available models. No models line ignores model/thinking overrides. Copy listed refs exactly; split provider/model:thinking into model and thinking. Never use an unlisted model with an explicit list.",
+		"- `default_model:` and `default_thinking:` run when model/thinking are omitted; this default combination is always allowed. `models:` lists additional accepted overrides; `models: any model ref` accepts any available model. An agent with no `models:` line ignores model and thinking overrides. Copy a listed ref intact into model; preserve model tags such as :latest and use thinking separately when needed. Never use an unlisted override when an explicit list is present.",
+		"- default_model/default_thinking apply when omitted; the default combination is always allowed. models lists additional overrides; 'any model ref' allows available models. No models line ignores model/thinking overrides. Copy listed refs intact into model, preserving tags; use thinking separately. Never use an unlisted override with an explicit list.",
 	],
 	[
 		"- `context-warn: Y%` makes this agent wrap up and report before its own context window fills, so its work is not lost to compaction. When a result says the agent stopped early, the stop saved the report. Do not resume an agent that stopped this way. Start a new agent for the unfinished work.",

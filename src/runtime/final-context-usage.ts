@@ -121,8 +121,10 @@ export function resolveFinalContextUsage(
 		const snapshot = findLatestAssistantContextSnapshot(
 			getNewEntries(running.sessionFile, running.launchEntryCount ?? 0),
 		);
-		const launchModel = running.modelRef ? splitModelRef(running.modelRef).model : undefined;
 		const snapshotModel = snapshot?.provider && snapshot.model ? `${snapshot.provider}/${snapshot.model}` : undefined;
+		const launchModel = running.modelRef ? splitModelRef(running.modelRef, {
+			getAvailable: () => snapshotModel ? [{ provider: snapshot!.provider!, id: snapshot!.model! }] : [],
+		}).model : undefined;
 		if (!snapshot || !launchModel || launchModel !== snapshotModel) return { ...warned, ...exhausted };
 		return {
 			contextTokens: snapshot.contextTokens,

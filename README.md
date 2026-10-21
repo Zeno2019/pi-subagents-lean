@@ -2,7 +2,7 @@
 
 Lean fork of [edxeth/pi-subagents](https://github.com/edxeth/pi-subagents), based on **v2.9.2 (`cf6dbf4`)**. On 2026-10-20, that release was also upstream's latest `main`.
 
-This fork keeps Markdown agent definitions, the `subagent` / `subagent_resume` / `subagent_kill` tools, model allowlists, thinking settings, permissions and upstream execution handlers. Its `src/lean.ts` entrypoint shortens tool descriptions and roster instructions. The roster's agent entries and model choices are preserved verbatim. The original `src/index.ts` remains available for comparison.
+This fork keeps Markdown agent definitions, the `subagent` / `subagent_resume` / `subagent_kill` tools, model allowlists, thinking settings, permissions and upstream execution handlers. Its `src/lean.ts` entrypoint shortens tool descriptions and roster instructions. The roster preserves agent roles and model choices, with default model identity and thinking displayed separately. The original `src/index.ts` remains available for comparison.
 
 ## Durable RPC background execution
 
@@ -263,6 +263,12 @@ For a fuller example of the intended style, see the [scout agent gist by edxeth]
 | `async` | `true` | `false` makes the launch sync |
 | `mode` | `interactive` | `interactive` pane or `background` process |
 | `parent-close-policy` | `terminate` | What happens to the child when the parent session exits: `terminate` (kill) or `continue` (leave running) |
+
+Model tags such as `provider/engine:latest` are part of the model ID. Keep the
+full ref in `model`; a separate `thinking: high` produces
+`provider/engine:latest:high`. Only a final Pi thinking level is interpreted as
+a thinking suffix, and an exact registered model ID takes precedence even when
+its name ends in a thinking word. Allowlists distinguish different tags exactly.
 
 Use YAML block syntax for more than one env var:
 
